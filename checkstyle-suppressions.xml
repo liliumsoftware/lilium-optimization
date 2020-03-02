@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+    "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+<suppressions>
+    <!-- Test sources: the public methods of test fixtures (TestPlan, TestNode, ...) need no Javadoc; every other check,
+         Javadoc style included, applies to tests as to main sources. @Test methods are exempt by checkstyle.xml. -->
+    <suppress checks="MissingJavadocMethod" files="[\\/]src[\\/]test[\\/]"/>
+</suppressions>
