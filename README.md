@@ -2,6 +2,10 @@
 
 Vehicle-routing and plan-optimization heuristics for Java. The library is a framework of abstract algorithm templates: you implement the `Nodeable`, `Planable` and `Trackable` interfaces against your own entities and a `PathCostCalculation` against your cost source, and the library supplies the heuristics.
 
+## What is included
+
+- resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
+
 ## Requirements
 
 - Java 11 or newer.
