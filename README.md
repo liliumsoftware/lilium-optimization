@@ -5,6 +5,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 ## What is included
 
 - resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
+- assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
 
 ## Requirements
 
