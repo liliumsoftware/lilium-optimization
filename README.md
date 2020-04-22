@@ -4,6 +4,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 
 ## What is included
 
+- Clarke-Wright savings construction (`AbstractClarkeWrightAlgorithm`) with a λ/β parameter sweep and zone locality.
 - 2-opt local search for closed tours (`AbstractTwoOptAlgorithm`).
 - resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
 - assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
