@@ -20,7 +20,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>None</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
