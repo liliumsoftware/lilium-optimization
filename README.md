@@ -2,6 +2,13 @@
 
 Vehicle-routing and plan-optimization heuristics for Java. The library is a framework of abstract algorithm templates: you implement the `Nodeable`, `Planable` and `Trackable` interfaces against your own entities and a `PathCostCalculation` against your cost source, and the library supplies the heuristics.
 
+## What is included
+
+- Clarke-Wright savings construction (`AbstractClarkeWrightAlgorithm`) with a λ/β parameter sweep and zone locality.
+- 2-opt local search for closed tours (`AbstractTwoOptAlgorithm`).
+- resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
+- assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
+
 ## Requirements
 
 - Java 11 or newer.
@@ -13,7 +20,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>None</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
