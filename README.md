@@ -8,6 +8,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - 2-opt local search for closed tours (`AbstractTwoOptAlgorithm`).
 - resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
 - assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
+- cheapest and regret-k insertion of unrouted customers (`AbstractInsertionAlgorithm`).
 
 ## Requirements
 
