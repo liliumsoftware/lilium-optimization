@@ -10,6 +10,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
 - cheapest and regret-k insertion of unrouted customers (`AbstractInsertionAlgorithm`).
 - partitioning of routes into independent zone groups for parallel optimization (`ZoneSplitAlgorithm`).
+- inter-route exchange and relocate moves (`AbstractExchangeAlgorithm`, `AbstractRelocateAlgorithm`).
 
 ## Requirements
 
