@@ -12,6 +12,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - partitioning of routes into independent zone groups for parallel optimization (`ZoneSplitAlgorithm`).
 - inter-route exchange and relocate moves (`AbstractExchangeAlgorithm`, `AbstractRelocateAlgorithm`).
 - route merging when it lowers total cost (`AbstractMergeAlgorithm`).
+- a pipeline skeleton and plan-code generation (`BaseAlgorithmRunner`, `DateTimePlanCodeGenerator`).
 
 ## Requirements
 
