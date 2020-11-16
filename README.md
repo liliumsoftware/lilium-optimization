@@ -29,7 +29,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 </dependency>
 ```
 
-Runtime dependencies to add to your project: `org.slf4j:slf4j-api`. Lombok is used at compile time only.
+Runtime dependencies to add to your project: `org.slf4j:slf4j-api` and, for the `routing` package, `jackson-databind`. Lombok is used at compile time only.
 
 ## Build
 
