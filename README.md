@@ -13,6 +13,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - inter-route exchange and relocate moves (`AbstractExchangeAlgorithm`, `AbstractRelocateAlgorithm`).
 - route merging when it lowers total cost (`AbstractMergeAlgorithm`).
 - a pipeline skeleton and plan-code generation (`BaseAlgorithmRunner`, `DateTimePlanCodeGenerator`).
+- an OSRM client and GeoJSON model for travel-time matrices (`RoutingProvider`).
 
 ## Requirements
 
@@ -29,7 +30,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 </dependency>
 ```
 
-Runtime dependencies to add to your project: `org.slf4j:slf4j-api`. Lombok is used at compile time only.
+Runtime dependencies to add to your project: `org.slf4j:slf4j-api` and, for the `routing` package, `jackson-databind`. Lombok is used at compile time only.
 
 ## Build
 

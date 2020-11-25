@@ -1,5 +1,6 @@
 package ir.baho.algorithm.exception;
 
+import ir.baho.algorithm.routing.RoutingException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,14 @@ class ExceptionContractTest {
         assertThat(new CancelException("Algorithm cancelled"))
                 .hasMessage("Algorithm cancelled")
                 .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    void routingExceptionCarriesMessageAndCause() {
+        Throwable cause = new java.io.IOException("connection reset");
+
+        assertThat(new RoutingException("boom")).hasMessage("boom").hasNoCause();
+        assertThat(new RoutingException("boom", cause)).hasMessage("boom").hasCause(cause);
     }
 
     @Test
