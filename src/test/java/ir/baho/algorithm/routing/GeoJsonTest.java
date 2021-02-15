@@ -1,9 +1,11 @@
 package ir.baho.algorithm.routing;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The GeoJSON value types are the API surface a host app deserializes routing responses into, so two things
@@ -50,6 +52,16 @@ class GeoJsonTest {
     }
 
     @Test
+    void osrmGeometryPayloadDeserializesIntoCoordinates() throws Exception {
+        String payload = "{\"type\":\"LineString\",\"coordinates\":[[1.0,2.0],[3.0,4.0]]}";
+
+        LineString geometry = mapper.readValue(payload, LineString.class);
+
+        assertThat(geometry.getCoordinates())
+                .containsExactly(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0));
+    }
+
+    @Test
     void altitudeSurvivesRoundTripAndAbsentAltitudeStaysNaN() throws Exception {
         Point withAltitude = new Point(1.0, 2.0, 3.0);
         Point withoutAltitude = new Point(1.0, 2.0);
@@ -61,6 +73,15 @@ class GeoJsonTest {
         assertThat(restoredWithAltitude).isEqualTo(withAltitude);
         assertThat(restoredWithoutAltitude.getCoordinates().hasAltitude()).isFalse();
         assertThat(restoredWithoutAltitude).isEqualTo(withoutAltitude);
+    }
+
+    @Test
+    void unknownPropertiesAreIgnored() throws Exception {
+        String payload = "{\"type\":\"LineString\",\"coordinates\":[[1.0,2.0]],\"unexpected\":{\"a\":1}}";
+
+        LineString geometry = mapper.readValue(payload, LineString.class);
+
+        assertThat(geometry.getCoordinates()).containsExactly(new LngLatAlt(1.0, 2.0));
     }
 
     @Test
@@ -190,11 +211,74 @@ class GeoJsonTest {
     }
 
     @Test
+    void coordinatesUseTheGeoJsonArrayFormNotABeanObject() throws Exception {
+        // Regression: a coordinate must be written/read as [longitude, latitude(, altitude, extra…)]. Serialized
+        // as a bean ({"longitude":…}) nothing can parse a real OSRM geometry, which is what broke getRoute.
+        assertThat(mapper.writeValueAsString(new Point(1.5, 2.5)))
+                .isEqualTo("{\"type\":\"Point\",\"coordinates\":[1.5,2.5]}");
+        assertThat(mapper.writeValueAsString(new Point(1.5, 2.5, 3.5)))
+                .contains("\"coordinates\":[1.5,2.5,3.5]");
+        assertThat(mapper.writeValueAsString(new LineString(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0))))
+                .contains("\"coordinates\":[[1.0,2.0],[3.0,4.0]]");
+
+        // Altitude plus additional elements append to the same array, in order.
+        assertThat(mapper.writeValueAsString(new Point(1.0, 2.0, 3.0, 4.0, 5.0)))
+                .contains("\"coordinates\":[1.0,2.0,3.0,4.0,5.0]");
+        assertThat(mapper.readValue("{\"type\":\"Point\",\"coordinates\":[1.0,2.0,3.0,4.0,5.0]}", Point.class)
+                .getCoordinates()).isEqualTo(new LngLatAlt(1.0, 2.0, 3.0, 4.0, 5.0));
+    }
+
+    @Test
+    void coordinateArrayShorterThanTwoElementsIsRejected() throws Exception {
+        assertThatThrownBy(() -> mapper.readValue("{\"type\":\"Point\",\"coordinates\":[1.0]}", Point.class))
+                .isInstanceOf(JsonMappingException.class)
+                .hasMessageContaining("longitude");
+    }
+
+    @Test
+    void legacyBeanFormIsStillAccepted() throws Exception {
+        // Payloads persisted before the array form became the output format must keep deserializing.
+        Point restored = mapper.readValue(
+                "{\"type\":\"Point\",\"coordinates\":{\"longitude\":1.5,\"latitude\":2.5,\"altitude\":\"NaN\"}}",
+                Point.class);
+
+        assertThat(restored.getCoordinates()).isEqualTo(new LngLatAlt(1.5, 2.5));
+        assertThat(restored.getCoordinates().hasAltitude()).isFalse();
+    }
+
+    @Test
+    void crsTypesUseTheLowercaseNamesOfTheGeoJsonSpecification() throws Exception {
+        // GeoJSON (2008) writes "type":"name" / "type":"link"; the enum constants used to be written in upper case and
+        // a standard lowercase payload was rejected.
+        assertThat(mapper.writeValueAsString(new Crs())).contains("\"type\":\"name\"");
+
+        Point named = mapper.readValue("{\"type\":\"Point\",\"coordinates\":[1,2],"
+                + "\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:4326\"}}}", Point.class);
+        Crs linked = mapper.readValue("{\"type\":\"link\",\"properties\":{}}", Crs.class);
+        Crs legacy = mapper.readValue("{\"type\":\"NAME\",\"properties\":{}}", Crs.class);
+
+        assertThat(named.getCrs().getType()).isEqualTo(CrsType.NAME);
+        assertThat(named.getCrs().getProperties()).containsEntry("name", "EPSG:4326");
+        assertThat(linked.getType()).isEqualTo(CrsType.LINK);
+        assertThat(legacy.getType()).as("payloads written by earlier versions").isEqualTo(CrsType.NAME);
+    }
+
+    @Test
     void aLegacyCoordinateWithNullAdditionalElementsIsAccepted() throws Exception {
         LngLatAlt restored = mapper.readValue(
                 "{\"longitude\":1,\"latitude\":2,\"altitude\":3,\"additionalElements\":null}", LngLatAlt.class);
 
         assertThat(restored).isEqualTo(new LngLatAlt(1, 2, 3));
+    }
+
+    @Test
+    void aLegacyCoordinateWithANullAltitudeHasNoAltitude() throws Exception {
+        // A bean whose altitude was never set may have been written as null; reading it failed with
+        // InputCoercionException.
+        LngLatAlt restored = mapper.readValue("{\"longitude\":1,\"latitude\":2,\"altitude\":null}", LngLatAlt.class);
+
+        assertThat(restored).isEqualTo(new LngLatAlt(1, 2));
+        assertThat(restored.hasAltitude()).isFalse();
     }
 
     @Test
