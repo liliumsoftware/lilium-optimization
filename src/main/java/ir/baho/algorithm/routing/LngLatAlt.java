@@ -1,5 +1,7 @@
 package ir.baho.algorithm.routing;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,7 +14,14 @@ import java.util.Arrays;
  * GeoJSON rule that additional elements are only valid alongside an altitude, and rejects NaN/infinite extras.
  * {@code equals}/{@code hashCode} are value-based. The class is mutable, so a coordinate used as a map key or set
  * element must not be changed while it is stored there.
+ *
+ * <p>JSON form is the GeoJSON <em>array</em> {@code [longitude, latitude(, altitude, extra…)]}, not a bean
+ * object — see {@link LngLatAltSerializer} / {@link LngLatAltDeserializer}. Without those handlers Jackson
+ * would expect {@code {"longitude":…}}, which no GeoJSON producer emits, so every routing geometry response
+ * would fail to parse.
  */
+@JsonSerialize(using = LngLatAltSerializer.class)
+@JsonDeserialize(using = LngLatAltDeserializer.class)
 @Getter
 public class LngLatAlt implements Serializable {
 

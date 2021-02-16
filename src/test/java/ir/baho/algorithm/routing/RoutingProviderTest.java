@@ -187,6 +187,28 @@ class RoutingProviderTest {
     }
 
     @Test
+    void routeGeometryIsDeserializedIntoALineString() {
+        responseBody.set("{\"routes\":[{\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[1,2],[3,4]]}}]}");
+
+        LineString route = provider.getRoute(new Point(1.0, 2.0), new Point(3.0, 4.0));
+
+        assertThat(route).isExactlyInstanceOf(LineString.class);
+        assertThat(route.getCoordinates()).containsExactly(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0));
+    }
+
+    @Test
+    void routeRequestUsesTheDrivingProfileAndGeoJsonOverview() {
+        // The route used to ask for the "car" profile while every other call uses "driving", and requested turn-by-turn
+        // steps it never read.
+        responseBody.set("{\"routes\":[{\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[1,2]]}}]}");
+
+        provider.getRoute(new Point(4.4, 52.2), new Point(4.9, 52.4));
+
+        assertThat(requestedUri.get().getPath()).isEqualTo("/route/v1/driving/4.4,52.2;4.9,52.4");
+        assertThat(requestedUri.get().getQuery()).isEqualTo("geometries=geojson&overview=full");
+    }
+
+    @Test
     void nonOkStatusBecomesRoutingExceptionMentioningTheStatus() {
         responseStatus.set(500);
         responseBody.set("upstream exploded");
