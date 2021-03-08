@@ -14,6 +14,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - route merging when it lowers total cost (`AbstractMergeAlgorithm`).
 - a pipeline skeleton and plan-code generation (`BaseAlgorithmRunner`, `DateTimePlanCodeGenerator`).
 - an OSRM client and GeoJSON model for travel-time matrices (`RoutingProvider`).
+- destroy-and-repair large-neighbourhood search (`AbstractDestroyRepairAlgorithm`).
 
 ## Requirements
 
