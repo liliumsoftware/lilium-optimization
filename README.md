@@ -16,6 +16,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - an OSRM client and GeoJSON model for travel-time matrices (`RoutingProvider`).
 - destroy-and-repair large-neighbourhood search (`AbstractDestroyRepairAlgorithm`).
 - k-medoids re-seeding of routes (`AbstractKMedoidsAlgorithm`).
+- balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
 
 ## Requirements
 
