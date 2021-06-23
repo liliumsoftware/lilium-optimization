@@ -14,11 +14,14 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - route merging when it lowers total cost (`AbstractMergeAlgorithm`).
 - a pipeline skeleton and plan-code generation (`BaseAlgorithmRunner`, `DateTimePlanCodeGenerator`).
 - an OSRM client and GeoJSON model for travel-time matrices (`RoutingProvider`).
+- destroy-and-repair large-neighbourhood search (`AbstractDestroyRepairAlgorithm`).
+- k-medoids re-seeding of routes (`AbstractKMedoidsAlgorithm`).
+- balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
 
 ## Requirements
 
 - Java 11 or newer.
-- Apache Maven 3.6.3 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.8.1 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -26,7 +29,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>1.2.1</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 

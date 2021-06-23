@@ -1,6 +1,6 @@
 package ir.baho.algorithm.routing;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -148,7 +148,7 @@ public class RoutingProvider {
             }
             return this.mapper.convertValue(geometry, new TypeReference<>() {
             });
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RoutingException("Routing request failed", e);
         }
     }
@@ -203,7 +203,7 @@ public class RoutingProvider {
                 }
             }
             return distanceMatrix;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RoutingException("Cost matrix request failed", e);
         }
     }
@@ -222,7 +222,7 @@ public class RoutingProvider {
         String response = this.sendRequest(request);
         try {
             return Math.round(field(firstRoute(response), "duration").asDouble() * 1000);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RoutingException("Duration request failed", e);
         }
     }
@@ -240,7 +240,7 @@ public class RoutingProvider {
         String response = this.sendRequest(request);
         try {
             return field(firstRoute(response), "distance").asLong();
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RoutingException("Distance request failed", e);
         }
     }
@@ -252,7 +252,7 @@ public class RoutingProvider {
      *                          {@code NullPointerException} (OSRM error answers such as {@code NoRoute} arrive
      *                          with a non-200 status and are rejected earlier)
      */
-    private JsonNode firstRoute(String response) throws RoutingException, JsonProcessingException {
+    private JsonNode firstRoute(String response) throws RoutingException, JacksonException {
         JsonNode routes = this.mapper.readTree(response).get("routes");
         if (routes == null || !routes.isArray() || routes.isEmpty()) {
             throw new RoutingException("Routing service response contains no route");
