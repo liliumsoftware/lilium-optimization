@@ -17,6 +17,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - destroy-and-repair large-neighbourhood search (`AbstractDestroyRepairAlgorithm`).
 - k-medoids re-seeding of routes (`AbstractKMedoidsAlgorithm`).
 - balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
+- splitting of stops too large for any resource (`AbstractSplitAlgorithm`, `AbstractBigNodeSplitAlgorithm`).
 
 ## Requirements
 
