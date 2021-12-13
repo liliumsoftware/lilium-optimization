@@ -13,13 +13,13 @@
         <maven.compiler.release>11</maven.compiler.release>
         <maven.compiler.version>3.8.1</maven.compiler.version>
         <maven.surefire.version>3.0.0-M5</maven.surefire.version>
-        <lombok.version>1.18.20</lombok.version>
-        <slf4j.version>1.7.30</slf4j.version>
+        <lombok.version>1.18.22</lombok.version>
+        <slf4j.version>1.7.32</slf4j.version>
         <jackson.version>2.12.3</jackson.version>
-        <junit.version>5.7.2</junit.version>
-        <assertj.version>3.19.0</assertj.version>
+        <junit.version>5.8.2</junit.version>
+        <assertj.version>3.21.0</assertj.version>
         <maven.checkstyle.version>3.1.2</maven.checkstyle.version>
-        <checkstyle.version>8.39</checkstyle.version>
+        <checkstyle.version>8.44</checkstyle.version>
     </properties>
 
     <dependencies>
