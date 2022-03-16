@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * Orchestration skeleton that wires the individual algorithms into an end-to-end planning run.
@@ -137,7 +136,7 @@ public abstract class BaseAlgorithmRunner<P extends Planable<P, N, ?>, N extends
      * The customers not present in any of {@code plans} (matched by {@code equals}), in input order.
      */
     protected List<N> getUnplannedNodes(List<P> plans, List<N> customers) {
-        List<N> plannedNodes = plans.stream().flatMap(p -> p.getCustomers().stream()).collect(Collectors.toList());
+        List<N> plannedNodes = plans.stream().flatMap(p -> p.getCustomers().stream()).toList();
         List<N> nodes = new ArrayList<>(customers);
         nodes.removeAll(plannedNodes);
         return nodes;

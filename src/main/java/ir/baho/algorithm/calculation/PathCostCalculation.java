@@ -340,8 +340,7 @@ public abstract class PathCostCalculation<P
         while (o != null && o.getClass().isArray()) {
             o = Array.getLength(o) == 0 ? null : Array.get(o, 0);
         }
-        Number number = o instanceof Number ? (Number) o : null;
-        if (number == null) {
+        if (!(o instanceof Number number)) {
             throw new IllegalStateException("Cost cell must be a Number or an array of Numbers, got "
                     + (o == null ? "null" : o.getClass().getName()));
         }
@@ -354,13 +353,11 @@ public abstract class PathCostCalculation<P
             if (value >= 0x1p63 || value < -0x1p63) {
                 throw outOfLongRange(number);
             }
-        } else if (number instanceof BigInteger) {
-            BigInteger integer = (BigInteger) number;
+        } else if (number instanceof BigInteger integer) {
             if (integer.bitLength() > 63) {
                 throw outOfLongRange(number);
             }
-        } else if (number instanceof BigDecimal) {
-            BigDecimal decimal = (BigDecimal) number;
+        } else if (number instanceof BigDecimal decimal) {
             if (decimal.compareTo(LONG_MIN) < 0 || decimal.compareTo(LONG_MAX) > 0) {
                 throw outOfLongRange(number);
             }
@@ -377,80 +374,7 @@ public abstract class PathCostCalculation<P
      * One complete, immutable initialization result. {@code index} maps a node code to its row/column; exactly one
      * of {@code intCells} / {@code longCells} is non-null and holds the {@code n × n} matrix row-major.
      */
-    private static final class State<N> {
-        private final Map<String, Integer> index;
-        private final int[] intCells;
-        private final long[] longCells;
-        private final List<List<N>> closest;
-
-        /**
-         * Creates a {@code State} from its components.
-         */
-        public State(Map<String, Integer> index, int[] intCells, long[] longCells, List<List<N>> closest) {
-            this.index = index;
-            this.intCells = intCells;
-            this.longCells = longCells;
-            this.closest = closest;
-        }
-
-        /**
-         * Returns the {@code index} component.
-         */
-        public Map<String, Integer> index() {
-            return index;
-        }
-
-        /**
-         * Returns the {@code intCells} component.
-         */
-        public int[] intCells() {
-            return intCells;
-        }
-
-        /**
-         * Returns the {@code longCells} component.
-         */
-        public long[] longCells() {
-            return longCells;
-        }
-
-        /**
-         * Returns the {@code closest} component.
-         */
-        public List<List<N>> closest() {
-            return closest;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof State)) {
-                return false;
-            }
-            State<?> other = (State<?>) o;
-            return java.util.Objects.equals(index, other.index)
-                    && java.util.Arrays.equals(intCells, other.intCells)
-                    && java.util.Arrays.equals(longCells, other.longCells)
-                    && java.util.Objects.equals(closest, other.closest);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(index, java.util.Arrays.hashCode(intCells),
-                    java.util.Arrays.hashCode(longCells), closest);
-        }
-
-        @Override
-        public String toString() {
-            return "State["
-                    + "index=" + index
-                    + ", intCells=" + java.util.Arrays.toString(intCells)
-                    + ", longCells=" + java.util.Arrays.toString(longCells)
-                    + ", closest=" + closest
-                    + "]";
-        }
+    private record State<N>(Map<String, Integer> index, int[] intCells, long[] longCells, List<List<N>> closest) {
 
         int size() {
             return index.size();

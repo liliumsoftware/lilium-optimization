@@ -154,68 +154,8 @@ class DomainContractTest {
     /**
      * Bare-bones {@link Planable}: implements only the four abstract methods so every default is exercised.
      */
-    private static final class MinimalPlan implements Planable<MinimalPlan, TestNode, TestTrackable> {
-        private final String code;
-        private final List<TestNode> nodes;
-        private final TestTrackable trackable;
-
-        /**
-         * Creates a {@code MinimalPlan} from its components.
-         */
-        public MinimalPlan(String code, List<TestNode> nodes, TestTrackable trackable) {
-            this.code = code;
-            this.nodes = nodes;
-            this.trackable = trackable;
-        }
-
-        /**
-         * Returns the {@code code} component.
-         */
-        public String code() {
-            return code;
-        }
-
-        /**
-         * Returns the {@code nodes} component.
-         */
-        public List<TestNode> nodes() {
-            return nodes;
-        }
-
-        /**
-         * Returns the {@code trackable} component.
-         */
-        public TestTrackable trackable() {
-            return trackable;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof MinimalPlan)) {
-                return false;
-            }
-            MinimalPlan other = (MinimalPlan) o;
-            return java.util.Objects.equals(code, other.code)
-                    && java.util.Objects.equals(nodes, other.nodes)
-                    && java.util.Objects.equals(trackable, other.trackable);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(code, nodes, trackable);
-        }
-
-        @Override
-        public String toString() {
-            return "MinimalPlan["
-                    + "code=" + code
-                    + ", nodes=" + nodes
-                    + ", trackable=" + trackable
-                    + "]";
-        }
+    private record MinimalPlan(String code, List<TestNode> nodes,
+                               TestTrackable trackable) implements Planable<MinimalPlan, TestNode, TestTrackable> {
 
         @Override
         public String getCode() {
@@ -246,46 +186,7 @@ class DomainContractTest {
     /**
      * Bare-bones {@link Trackable}: only {@code getCode}/{@code copy}, so the defaults show through.
      */
-    private static final class MinimalTrackable implements Trackable<MinimalTrackable> {
-        private final String code;
-
-        /**
-         * Creates a {@code MinimalTrackable} from its components.
-         */
-        public MinimalTrackable(String code) {
-            this.code = code;
-        }
-
-        /**
-         * Returns the {@code code} component.
-         */
-        public String code() {
-            return code;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof MinimalTrackable)) {
-                return false;
-            }
-            MinimalTrackable other = (MinimalTrackable) o;
-            return java.util.Objects.equals(code, other.code);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(code);
-        }
-
-        @Override
-        public String toString() {
-            return "MinimalTrackable["
-                    + "code=" + code
-                    + "]";
-        }
+    private record MinimalTrackable(String code) implements Trackable<MinimalTrackable> {
 
         @Override
         public String getCode() {
@@ -303,57 +204,7 @@ class DomainContractTest {
     /**
      * Bare-bones {@link Nodeable}.
      */
-    private static final class MinimalNode implements Nodeable<MinimalNode> {
-        private final String code;
-        private final Type type;
-
-        /**
-         * Creates a {@code MinimalNode} from its components.
-         */
-        public MinimalNode(String code, Type type) {
-            this.code = code;
-            this.type = type;
-        }
-
-        /**
-         * Returns the {@code code} component.
-         */
-        public String code() {
-            return code;
-        }
-
-        /**
-         * Returns the {@code type} component.
-         */
-        public Type type() {
-            return type;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof MinimalNode)) {
-                return false;
-            }
-            MinimalNode other = (MinimalNode) o;
-            return java.util.Objects.equals(code, other.code)
-                    && java.util.Objects.equals(type, other.type);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(code, type);
-        }
-
-        @Override
-        public String toString() {
-            return "MinimalNode["
-                    + "code=" + code
-                    + ", type=" + type
-                    + "]";
-        }
+    private record MinimalNode(String code, Type type) implements Nodeable<MinimalNode> {
 
         @Override
         public String getCode() {

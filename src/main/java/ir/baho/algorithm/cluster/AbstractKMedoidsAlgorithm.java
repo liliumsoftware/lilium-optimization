@@ -50,13 +50,12 @@ public abstract class AbstractKMedoidsAlgorithm<P
      *                                  the plans and {@code unplannedNodes} share a code
      */
     public List<P> apply(N origin, List<N> unplannedNodes, List<P> plans) {
-        List<N> allCustomers = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream())
-                .collect(Collectors.toList()));
+        List<N> allCustomers = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream()).toList());
         allCustomers.addAll(unplannedNodes);
         requireDistinctCodes(allCustomers);
         List<List<N>> historyMedoids = new ArrayList<>();
         while (!isInterrupted()) {
-            List<N> medoids = plans.stream().map(costCalculation::getMedoid).collect(Collectors.toList());
+            List<N> medoids = plans.stream().map(costCalculation::getMedoid).toList();
 
             historyMedoids.add(medoids);
             // Seed one plan per medoid, each against the units the earlier seeds left: a seed no resource can take
@@ -74,8 +73,7 @@ public abstract class AbstractKMedoidsAlgorithm<P
                 // leaves the new seed without a resource, so the accepted set stays consistently assigned
             }
 
-            List<N> otherNodes = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream())
-                    .collect(Collectors.toList()));
+            List<N> otherNodes = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream()).toList());
             otherNodes.addAll(unplannedNodes);
             otherNodes.removeAll(seededMedoids);
 
@@ -94,9 +92,8 @@ public abstract class AbstractKMedoidsAlgorithm<P
                     .sorted(Comparator.comparingLong(e -> e.getValue().entrySet().stream()
                             .min(Map.Entry.comparingByValue()).orElseThrow().getValue()))
                     .map(e -> Map.entry(e.getKey(), e.getValue().entrySet().stream()
-                            .sorted(Map.Entry.comparingByValue())
-                            .collect(Collectors.toList()).stream().map(Map.Entry::getKey)
-                            .collect(Collectors.toList()))).collect(Collectors.toList());
+                            .sorted(Map.Entry.comparingByValue()).toList().stream().map(Map.Entry::getKey)
+                            .toList())).toList();
 
             for (Map.Entry<N, List<N>> nMedoids : nodeMedoids) {
                 for (N medoid : nMedoids.getValue()) {
@@ -125,8 +122,7 @@ public abstract class AbstractKMedoidsAlgorithm<P
             log.debug(getMessage(plans));
 
             List<P> finalPlans = plans;
-            Set<N> finalMedoids = new HashSet<>(finalPlans.stream().map(costCalculation::getMedoid)
-                    .collect(Collectors.toList()));
+            Set<N> finalMedoids = new HashSet<>(finalPlans.stream().map(costCalculation::getMedoid).toList());
             if (historyMedoids.stream().anyMatch(history -> new HashSet<>(history).equals(finalMedoids))) {
                 return plans;
             }
@@ -138,8 +134,7 @@ public abstract class AbstractKMedoidsAlgorithm<P
      * The medoids whose zone neighbours the zone of {@code node}: the clusters it may join.
      */
     protected List<N> getMedoids(N node, List<N> medoids) {
-        return medoids.stream().filter(m -> costCalculation.isNeighbor(m.getZone(), node.getZone()))
-                .collect(Collectors.toList());
+        return medoids.stream().filter(m -> costCalculation.isNeighbor(m.getZone(), node.getZone())).toList();
     }
 
     /**

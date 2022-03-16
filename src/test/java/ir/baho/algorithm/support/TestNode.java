@@ -125,10 +125,9 @@ public final class TestNode implements Nodeable<TestNode> {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof TestNode)) {
+        if (!(o instanceof TestNode n)) {
             return false;
         }
-        TestNode n = (TestNode) o;
         if (identityEquality || n.identityEquality) {
             return false;
         }

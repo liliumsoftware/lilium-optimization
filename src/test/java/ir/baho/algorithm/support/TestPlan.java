@@ -113,10 +113,9 @@ public final class TestPlan implements Planable<TestPlan, TestNode, TestTrackabl
         if (this == o) {
             return true;
         }
-        if (!(o instanceof TestPlan)) {
+        if (!(o instanceof TestPlan p)) {
             return false;
         }
-        TestPlan p = (TestPlan) o;
         // symmetric whatever the two modes are: plans in different modes are never equal
         if (equality == Equality.IDENTITY || equality != p.equality) {
             return false;

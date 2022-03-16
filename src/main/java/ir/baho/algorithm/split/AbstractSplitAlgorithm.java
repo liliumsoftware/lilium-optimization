@@ -10,7 +10,6 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Splits nodes that are too large to be served by a single trackable: each oversized node is carved into a piece
@@ -51,7 +50,7 @@ public abstract class AbstractSplitAlgorithm<P
      *                               resource that can carry nothing when {@link #isShrinking} is not overridden
      */
     public List<N> split(List<N> nodes) {
-        List<T> sortedTrackables = trackables.stream().sorted(this.comparator()).collect(Collectors.toList());
+        List<T> sortedTrackables = trackables.stream().sorted(this.comparator()).toList();
         if (sortedTrackables.isEmpty()) {
             log.trace("Can not split, no trackable available");
             return nodes;

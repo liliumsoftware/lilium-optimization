@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -294,7 +293,7 @@ class TrackableAssignmentTest {
                 new TestTrackable("T1", 5), new TestTrackable("T2", 5)));
         List<TestPlan> plans = new ArrayList<>(List.of(plan("p1", 1), plan("p2", 2)));
         assignment.assign(plans);
-        List<TestTrackable> before = plans.stream().map(TestPlan::getTrackable).collect(Collectors.toList());
+        List<TestTrackable> before = plans.stream().map(TestPlan::getTrackable).toList();
 
         assignment.repairExchange(plans);
 

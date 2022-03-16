@@ -68,10 +68,9 @@ public final class TestTrackable implements Trackable<TestTrackable> {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof TestTrackable)) {
+        if (!(o instanceof TestTrackable t)) {
             return false;
         }
-        TestTrackable t = (TestTrackable) o;
         return getIndex() == t.getIndex() && Objects.equals(code, t.code);
     }
 

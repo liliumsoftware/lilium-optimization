@@ -1,7 +1,6 @@
 package ir.baho.algorithm.domain;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * A single route/plan: an ordered sequence of stops executed by one {@link Trackable} resource.
@@ -91,7 +90,7 @@ public interface Planable<P extends Planable<P, N, T>, N extends Nodeable<N>, T 
      * The customer stops in route order (a new unmodifiable list).
      */
     default List<N> getCustomers() {
-        return getNodes().stream().filter(n -> n.getType() == Nodeable.Type.CUSTOMER).collect(Collectors.toList());
+        return getNodes().stream().filter(n -> n.getType() == Nodeable.Type.CUSTOMER).toList();
     }
 
     /**

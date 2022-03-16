@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Constructive skeleton that places unrouted customers into existing plans by evaluating every legal
@@ -117,7 +116,7 @@ public abstract class AbstractInsertionAlgorithm<P
         if (!customers.isEmpty()) {
             Comparator<N> nodeComparator = nodeComparator();
             if (nodeComparator != null) {
-                customers = customers.stream().sorted(nodeComparator).collect(Collectors.toList());
+                customers = customers.stream().sorted(nodeComparator).toList();
             }
             for (N customer : customers) {
                 C insertionCandidate = getBestInsertionCandidate(plans, customer, index);
@@ -166,7 +165,7 @@ public abstract class AbstractInsertionAlgorithm<P
         List<C> bestInsertionCandidates = regretSums.entrySet().stream()
                 .sorted(Comparator.comparing((Function<Map.Entry<C, Long>, Long>) Map.Entry::getValue).reversed()
                         .thenComparing(o -> o.getKey().getNewNode().getCode()))
-                .map(Map.Entry::getKey).collect(Collectors.toList());
+                .map(Map.Entry::getKey).toList();
 
         Comparator<N> nodeComparator = nodeComparator();
         if (nodeComparator != null) {
@@ -183,7 +182,7 @@ public abstract class AbstractInsertionAlgorithm<P
      */
     public C getBestInsertionCandidate(List<P> plans, N customer, int... index) {
         List<C> planCandidates = getInsertionCandidates(plans, customer, index)
-                .stream().filter(c -> c.getCandidatePlan() != null).collect(Collectors.toList());
+                .stream().filter(c -> c.getCandidatePlan() != null).toList();
         return planCandidates.isEmpty() ? null : planCandidates.get(0);
     }
 
@@ -196,7 +195,7 @@ public abstract class AbstractInsertionAlgorithm<P
         }
 
         List<C> sortedPlanCandidates = planCandidates.stream().filter(c -> c.getCandidatePlan() != null)
-                .sorted(comparator().thenComparing(o -> o.getNewNode().getCode())).collect(Collectors.toList());
+                .sorted(comparator().thenComparing(o -> o.getNewNode().getCode())).toList();
         planCandidates.removeAll(sortedPlanCandidates);
         planCandidates.addAll(0, sortedPlanCandidates);
         return planCandidates;
