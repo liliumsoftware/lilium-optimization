@@ -111,57 +111,7 @@ public abstract class BaseAlgorithm {
     /**
      * Element frequencies of the two collections compared by {@link #isEqualCollection}.
      */
-    private static final class CardinalityHelper<O> {
-        private final Map<O, Integer> cardinalityA;
-        private final Map<O, Integer> cardinalityB;
-
-        /**
-         * Creates a {@code CardinalityHelper} from its components.
-         */
-        public CardinalityHelper(Map<O, Integer> cardinalityA, Map<O, Integer> cardinalityB) {
-            this.cardinalityA = cardinalityA;
-            this.cardinalityB = cardinalityB;
-        }
-
-        /**
-         * Returns the {@code cardinalityA} component.
-         */
-        public Map<O, Integer> cardinalityA() {
-            return cardinalityA;
-        }
-
-        /**
-         * Returns the {@code cardinalityB} component.
-         */
-        public Map<O, Integer> cardinalityB() {
-            return cardinalityB;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof CardinalityHelper)) {
-                return false;
-            }
-            CardinalityHelper<?> other = (CardinalityHelper<?>) o;
-            return java.util.Objects.equals(cardinalityA, other.cardinalityA)
-                    && java.util.Objects.equals(cardinalityB, other.cardinalityB);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(cardinalityA, cardinalityB);
-        }
-
-        @Override
-        public String toString() {
-            return "CardinalityHelper["
-                    + "cardinalityA=" + cardinalityA
-                    + ", cardinalityB=" + cardinalityB
-                    + "]";
-        }
+    private record CardinalityHelper<O>(Map<O, Integer> cardinalityA, Map<O, Integer> cardinalityB) {
 
         public CardinalityHelper(Iterable<? extends O> a, Iterable<? extends O> b) {
             this(getCardinalityMap(a), getCardinalityMap(b));
@@ -187,6 +137,7 @@ public abstract class BaseAlgorithm {
             Integer count = freqMap.get(obj);
             return Objects.requireNonNullElse(count, 0);
         }
+
     }
 
 }

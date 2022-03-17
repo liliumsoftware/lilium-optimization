@@ -258,7 +258,7 @@ public abstract class AbstractDestroyRepairAlgorithm<P
                 .sorted(Map.Entry.<N, Integer>comparingByValue().reversed()
                         .thenComparing(Comparator.comparing((Map.Entry<N, Integer> o) -> costRanks.get(o.getKey()
                                 .getCode())).reversed()))
-                .collect(Collectors.toList());
+                .toList();
 
     }
 

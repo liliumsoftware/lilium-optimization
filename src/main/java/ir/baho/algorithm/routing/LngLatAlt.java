@@ -136,10 +136,9 @@ public class LngLatAlt implements Serializable {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof LngLatAlt)) {
+        if (!(o instanceof LngLatAlt lngLatAlt)) {
             return false;
         }
-        LngLatAlt lngLatAlt = (LngLatAlt) o;
         return Double.compare(lngLatAlt.latitude, latitude) == 0 && Double.compare(lngLatAlt.longitude, longitude) == 0
                 && Double.compare(lngLatAlt.altitude, altitude) == 0
                 && Arrays.equals(lngLatAlt.additionalElements, additionalElements);

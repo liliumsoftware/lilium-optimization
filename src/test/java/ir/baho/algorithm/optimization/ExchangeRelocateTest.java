@@ -23,7 +23,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -482,7 +481,7 @@ class ExchangeRelocateTest {
                         .isLessThanOrEqualTo(expected.get(k));
                 PlanInvariants.assertNodeLayout(result);
                 PlanInvariants.assertAllCustomersVisitedExactlyOnce(result,
-                        nodes.stream().filter(n -> n.getType() == Nodeable.Type.CUSTOMER).collect(Collectors.toList()));
+                        nodes.stream().filter(n -> n.getType() == Nodeable.Type.CUSTOMER).toList());
             }
         }
     }

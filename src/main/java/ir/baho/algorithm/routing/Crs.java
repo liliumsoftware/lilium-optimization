@@ -23,10 +23,9 @@ public class Crs implements Serializable {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof Crs)) {
+        if (!(o instanceof Crs crs)) {
             return false;
         }
-        Crs crs = (Crs) o;
         if (!Objects.equals(properties, crs.properties)) {
             return false;
         }

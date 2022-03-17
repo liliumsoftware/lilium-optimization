@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,7 +65,7 @@ class ZoneGroupsTest {
 
         List<TestPlan> result = ZoneGroups.apply(calculation(), assignment, 2, plans, (others, group) -> {
             String zone = group.get(0).getZone();
-            List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).collect(Collectors.toList()));
+            List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).toList());
             candidate.add(plan(zone + "-extra", zone, origin, zone.equals("Z1") ? z1b : z2d));
             boolean assigned = assignment.assign(others, candidate);
             calls.add(zone + "=" + assigned);
@@ -92,7 +91,7 @@ class ZoneGroupsTest {
 
         List<TestPlan> result = ZoneGroups.apply(calculation(), assignment, 2, plans, (others, group) -> {
             String zone = group.get(0).getZone();
-            List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).collect(Collectors.toList()));
+            List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).toList());
             if (zone.equals("Z1")) {
                 candidate.add(plan("Z1-extra", zone, origin, z1b));
             }
@@ -209,8 +208,7 @@ class ZoneGroupsTest {
             PlanInvariants.assertEveryPlanHasTrackable(result);
             PlanInvariants.assertCustomerCountWithinCapacity(result);
             PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, nodes.subList(1, nodes.size()));
-            List<String> routes = result.stream().map(p -> p.getCode() + p.getNodes() + p.getTrackable())
-                    .collect(Collectors.toList());
+            List<String> routes = result.stream().map(p -> p.getCode() + p.getNodes() + p.getTrackable()).toList();
             if (first == null) {
                 first = routes;
             } else {

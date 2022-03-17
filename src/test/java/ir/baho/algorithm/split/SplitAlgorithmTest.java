@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -64,7 +63,7 @@ class SplitAlgorithmTest {
     // ---------------------------------------------------------------- split against the smallest resource
 
     private List<Integer> demands(List<TestNode> nodes) {
-        return nodes.stream().map(TestNode::getDemand).collect(Collectors.toList());
+        return nodes.stream().map(TestNode::getDemand).toList();
     }
 
     @Test

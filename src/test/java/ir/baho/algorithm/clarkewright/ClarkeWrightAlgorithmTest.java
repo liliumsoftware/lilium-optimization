@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,7 +56,7 @@ class ClarkeWrightAlgorithmTest {
                 new RecostingLocalSearch(calculation), destination, OptimizationType.NO_RESTRICTION)
                 .plan(origin, customers);
         assertThat(plans).hasSize(1);
-        return plans.get(0).getNodes().stream().map(n -> n.getX() + "," + n.getY()).collect(Collectors.toList());
+        return plans.get(0).getNodes().stream().map(n -> n.getX() + "," + n.getY()).toList();
     }
 
     private static TestClarkeWright seedJudge(MatrixCostCalculation calculation, boolean firstReturns,

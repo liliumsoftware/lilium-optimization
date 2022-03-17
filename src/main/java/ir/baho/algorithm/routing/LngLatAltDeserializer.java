@@ -61,27 +61,20 @@ public class LngLatAltDeserializer extends JsonDeserializer<LngLatAlt> {
             String name = parser.currentName();
             parser.nextToken();
             switch (name) {
-                case "longitude":
-                    longitude = readDouble(parser);
-                    break;
-                case "latitude":
-                    latitude = readDouble(parser);
-                    break;
+                case "longitude" -> longitude = readDouble(parser);
+                case "latitude" -> latitude = readDouble(parser);
                 // null (an unset altitude written by a bean serializer) means no altitude
-                case "altitude":
-                    altitude = parser.currentToken() == JsonToken.VALUE_NULL ? Double.NaN
-                            : readDouble(parser);
-                    break;
-                case "additionalElements":
+                case "altitude" -> altitude = parser.currentToken() == JsonToken.VALUE_NULL ? Double.NaN
+                        : readDouble(parser);
+                case "additionalElements" -> {
                     // null (as a bean with an unset array may have been written) means no additional elements
                     if (parser.currentToken() != JsonToken.VALUE_NULL) {
                         while (parser.nextToken() != JsonToken.END_ARRAY) {
                             additionalElements.add(readDouble(parser));
                         }
                     }
-                    break;
-                default:
-                    parser.skipChildren();
+                }
+                default -> parser.skipChildren();
             }
         }
         return build(longitude, latitude, altitude, additionalElements);

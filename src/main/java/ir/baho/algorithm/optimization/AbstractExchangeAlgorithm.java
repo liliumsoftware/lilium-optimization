@@ -49,29 +49,30 @@ public abstract class AbstractExchangeAlgorithm<P
         firstPlanSwapCandidates.forEach(n -> firstPlan.getNodes().remove(firstPlan.getNodes().indexOf(n)));
         secondPlanSwapCandidates.forEach(n -> secondPlan.getNodes().remove(secondPlan.getNodes().indexOf(n)));
 
-        switch (type) {
-            case TWO_OPT:
+        return switch (type) {
+            case TWO_OPT -> {
                 firstPlan.getNodes().addAll(firstPlanStart, secondPlanSwapCandidates);
                 secondPlan.getNodes().addAll(secondPlanStart, firstPlanSwapCandidates);
                 plans.set(plans.indexOf(firstPlan), localSearchAlgorithm.apply(firstPlan));
                 plans.set(plans.indexOf(secondPlan), localSearchAlgorithm.apply(secondPlan));
-                return true;
-            case INSERTION:
+                yield true;
+            }
+            case INSERTION -> {
                 List<N> firstInsertedNodes = insertionAlgorithm.insert(plans, firstPlanSwapCandidates,
                         plans.indexOf(secondPlan));
                 if (firstInsertedNodes.size() != firstPlanSwapCandidates.size()) {
-                    return false;
+                    yield false;
                 }
                 List<N> secondInsertedNodes = insertionAlgorithm.insert(plans, secondPlanSwapCandidates,
                         plans.indexOf(firstPlan));
-                return secondInsertedNodes.size() == secondPlanSwapCandidates.size();
-            case SIMPLE:
+                yield secondInsertedNodes.size() == secondPlanSwapCandidates.size();
+            }
+            case SIMPLE -> {
                 firstPlan.getNodes().addAll(firstPlanStart, secondPlanSwapCandidates);
                 secondPlan.getNodes().addAll(secondPlanStart, firstPlanSwapCandidates);
-                return true;
-            default:
-                throw new IllegalStateException("Unknown type " + type);
-        }
+                yield true;
+            }
+        };
     }
 
     @Override
