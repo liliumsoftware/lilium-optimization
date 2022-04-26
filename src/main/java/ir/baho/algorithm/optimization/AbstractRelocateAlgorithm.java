@@ -101,22 +101,23 @@ public abstract class AbstractRelocateAlgorithm<P
         List<N> firstPlanSwapCandidates = new ArrayList<>(firstPlan.getNodes().subList(firstPlanStart, firstPlanEnd));
         firstPlanSwapCandidates.forEach(n -> firstPlan.getNodes().remove(firstPlan.getNodes().indexOf(n)));
 
-        switch (type) {
-            case TWO_OPT:
+        return switch (type) {
+            case TWO_OPT -> {
                 secondPlan.getNodes().addAll(secondPlanStart, firstPlanSwapCandidates);
                 plans.set(plans.indexOf(firstPlan), localSearchAlgorithm.apply(firstPlan));
                 plans.set(plans.indexOf(secondPlan), localSearchAlgorithm.apply(secondPlan));
-                return true;
-            case INSERTION:
+                yield true;
+            }
+            case INSERTION -> {
                 List<N> firstInsertedNodes = insertionAlgorithm.insert(plans, firstPlanSwapCandidates,
                         plans.indexOf(secondPlan));
-                return firstInsertedNodes.size() == firstPlanSwapCandidates.size();
-            case SIMPLE:
+                yield firstInsertedNodes.size() == firstPlanSwapCandidates.size();
+            }
+            case SIMPLE -> {
                 secondPlan.getNodes().addAll(secondPlanStart, firstPlanSwapCandidates);
-                return true;
-            default:
-                throw new IllegalStateException("Unknown type " + type);
-        }
+                yield true;
+            }
+        };
     }
 
     @Override

@@ -6,6 +6,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 
 - Clarke-Wright savings construction (`AbstractClarkeWrightAlgorithm`) with a λ/β parameter sweep and zone locality.
 - 2-opt local search for closed tours (`AbstractTwoOptAlgorithm`).
+- 2-opt variant for open routes (`AbstractOpenTwoOptAlgorithm`).
 - resource-to-route assignment with relocate / exchange / reassign repair passes (`TrackableAssignment`).
 - assignment for an unlimited fleet (`InfiniteTrackableAssignment`).
 - cheapest and regret-k insertion of unrouted customers (`AbstractInsertionAlgorithm`).
@@ -21,8 +22,8 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 
 ## Requirements
 
-- Java 11 or newer.
-- Apache Maven 3.8.4 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Java 17 or newer.
+- Apache Maven 3.8.5 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -30,7 +31,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>1.4.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 

@@ -37,7 +37,7 @@ public class ZoneSplitAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<
         if (customers.isEmpty()) {
             return Collections.singletonList(plan.getZone());
         }
-        return customers.stream().map(Nodeable::getZone).collect(Collectors.toList());
+        return customers.stream().map(Nodeable::getZone).toList();
     }
 
     /**
@@ -137,7 +137,7 @@ public class ZoneSplitAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<
             return groups;
         }
         groups.sort(Comparator.comparingInt((ToIntFunction<List<N>>) List::size).reversed());
-        List<List<N>> largestGroups = groups.stream().limit(maxSplitCount).collect(Collectors.toList());
+        List<List<N>> largestGroups = groups.stream().limit(maxSplitCount).toList();
         groups.removeAll(largestGroups);
         while (!groups.isEmpty()) {
             List<N> group = groups.remove(0);

@@ -181,8 +181,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
             originals.add(plan);
         }
         List<P> previous = originals.stream().map(Planable::copy).collect(Collectors.toCollection(ArrayList::new));
-        final List<P> emptyPrevious = previous.stream().filter(p -> p.getCustomers().isEmpty())
-                .collect(Collectors.toList());
+        final List<P> emptyPrevious = previous.stream().filter(p -> p.getCustomers().isEmpty()).toList();
         previous.removeIf(p -> p.getCustomers().isEmpty());
         Set<String> plannedCodes = previous.stream().flatMap(p -> p.getNodes().stream()).map(Nodeable::getCode)
                 .collect(Collectors.toSet());
@@ -198,7 +197,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
                                                     && codesOf(nodes.getValue()).contains(p.getCustomers().get(0)
                                                     .getCode())),
                                             previous.stream().filter(p -> Objects.equals(p.getZone(),
-                                                    nodes.getKey()))).collect(Collectors.toList()))).lambdaBeta()));
+                                                    nodes.getKey()))).toList())).lambdaBeta()));
             initialPlans.addAll(0, previous);
             finalPlans = mergePlans(initialPlans, getSavings(origin, customers, getRouteStarts(origin, initialPlans),
                     getRouteEnds(origin, initialPlans), zoneLambdaBetas));
@@ -339,8 +338,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
         if (betas.isEmpty()) {
             return lambdas.parallelStream().map(l -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
                             .collect(Collectors.toList()),
-                    getSavings(origin, customers, routeStarts, routeEnds, l, 0)), new LambdaBeta(l)))
-                    .collect(Collectors.toList());
+                    getSavings(origin, customers, routeStarts, routeEnds, l, 0)), new LambdaBeta(l))).toList();
         } else {
             Map<LambdaBeta, List<Saving>> savings = new HashMap<>();
             lambdas.forEach(l -> betas.forEach(b -> savings.put(new LambdaBeta(l, b), getSavings(origin, customers,
@@ -427,7 +425,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
                     plans.clear();
                     mergedPlans.replaceAll(localSearchAlgorithm::apply);
                     plans.addAll(tempPlans.stream().filter(p -> p.getTrackable() == null && !p.equals(newPlan))
-                            .collect(Collectors.toList()));
+                            .toList());
                     plans.addAll(mergedPlans);
                     log.trace("Merged plan: {}", newPlan);
                 } else {
@@ -437,8 +435,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
         }
         savings.clear();
         List<P> finalPlans = plans.stream().filter(p -> p.getTrackable() != null).collect(Collectors.toList());
-        for (P plan : plans.stream().filter(p -> p.getTrackable() == null).sorted(planComparator())
-                .collect(Collectors.toList())) {
+        for (P plan : plans.stream().filter(p -> p.getTrackable() == null).sorted(planComparator()).toList()) {
             checkCancel();
             if (trackableAssignment.assign(finalPlans, plan)) {
                 finalPlans.add(plan);
@@ -604,57 +601,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
     /**
      * A saving together with its plain (unblended) value, used only to order savings.
      */
-    private static final class RankedSaving {
-        private final Saving saving;
-        private final double plain;
-
-        /**
-         * Creates a {@code RankedSaving} from its components.
-         */
-        public RankedSaving(Saving saving, double plain) {
-            this.saving = saving;
-            this.plain = plain;
-        }
-
-        /**
-         * Returns the {@code saving} component.
-         */
-        public Saving saving() {
-            return saving;
-        }
-
-        /**
-         * Returns the {@code plain} component.
-         */
-        public double plain() {
-            return plain;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof RankedSaving)) {
-                return false;
-            }
-            RankedSaving other = (RankedSaving) o;
-            return java.util.Objects.equals(saving, other.saving)
-                    && Double.compare(plain, other.plain) == 0;
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(saving, plain);
-        }
-
-        @Override
-        public String toString() {
-            return "RankedSaving["
-                    + "saving=" + saving
-                    + ", plain=" + plain
-                    + "]";
-        }
+    private record RankedSaving(Saving saving, double plain) {
     }
 
 }

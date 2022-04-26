@@ -60,46 +60,7 @@ public final class CapacityRules {
     /**
      * Category keyed by capacity; distinct capacities are treated as exchangeable-across categories.
      */
-    public static final class CapacityCategory implements TrackableCategory {
-        private final int capacity;
-
-        /**
-         * Creates a {@code CapacityCategory} from its components.
-         */
-        public CapacityCategory(int capacity) {
-            this.capacity = capacity;
-        }
-
-        /**
-         * Returns the {@code capacity} component.
-         */
-        public int capacity() {
-            return capacity;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof CapacityCategory)) {
-                return false;
-            }
-            CapacityCategory other = (CapacityCategory) o;
-            return capacity == other.capacity;
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(capacity);
-        }
-
-        @Override
-        public String toString() {
-            return "CapacityCategory["
-                    + "capacity=" + capacity
-                    + "]";
-        }
+    public record CapacityCategory(int capacity) implements TrackableCategory {
     }
 
 }

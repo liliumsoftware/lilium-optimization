@@ -46,10 +46,9 @@ public class Geometry<T> extends GeoJsonObject {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof Geometry)) {
+        if (!(o instanceof Geometry<?> geometry)) {
             return false;
         }
-        Geometry<?> geometry = (Geometry<?>) o;
         if (!super.equals(o)) {
             return false;
         }

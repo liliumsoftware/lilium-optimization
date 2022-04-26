@@ -20,7 +20,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -264,7 +263,7 @@ class DestroyRepairTest {
                         new RecostingLocalSearch(calculation),
                         new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 2, 0).apply(plans);
 
-                routes.add(result.stream().map(plan -> plan.getCode() + plan.getNodes()).collect(Collectors.toList()));
+                routes.add(result.stream().map(plan -> plan.getCode() + plan.getNodes()).toList());
             }
             assertThat(routes).as("seed %d", seed).allSatisfy(route -> assertThat(route).isEqualTo(routes.get(0)));
         }

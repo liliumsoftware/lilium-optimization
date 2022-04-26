@@ -53,10 +53,9 @@ public class Point extends GeoJsonObject {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof Point)) {
+        if (!(o instanceof Point point)) {
             return false;
         }
-        Point point = (Point) o;
         if (!super.equals(o)) {
             return false;
         }

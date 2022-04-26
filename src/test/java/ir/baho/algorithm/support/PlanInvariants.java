@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.ToLongFunction;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -65,14 +64,14 @@ public final class PlanInvariants {
      * dropped and duplicated/invented customers in a single assertion.
      */
     public static void assertAllCustomersVisitedExactlyOnce(Collection<TestPlan> plans, Collection<TestNode> required) {
-        List<String> visited = customersOf(plans).stream().map(TestNode::getCode).collect(Collectors.toList());
-        List<String> expected = required.stream().map(TestNode::getCode).collect(Collectors.toList());
+        List<String> visited = customersOf(plans).stream().map(TestNode::getCode).toList();
+        List<String> expected = required.stream().map(TestNode::getCode).toList();
         assertThat(visited).as("every required customer visited exactly once, none invented")
                 .containsExactlyInAnyOrderElementsOf(expected);
     }
 
     public static void assertNoDuplicateCustomers(Collection<TestPlan> plans) {
-        List<String> visited = customersOf(plans).stream().map(TestNode::getCode).collect(Collectors.toList());
+        List<String> visited = customersOf(plans).stream().map(TestNode::getCode).toList();
         assertThat(visited).as("no customer served twice").doesNotHaveDuplicates();
     }
 
@@ -91,8 +90,7 @@ public final class PlanInvariants {
                     .isEqualTo(Nodeable.Type.ORIGIN);
             assertThat(nodes.stream().filter(n -> n.getType() == Nodeable.Type.ORIGIN))
                     .as("plan %s has exactly one origin", plan.getCode()).hasSize(1);
-            List<TestNode> destinations = nodes.stream().filter(n -> n.getType() == Nodeable.Type.DESTINATION)
-                    .collect(Collectors.toList());
+            List<TestNode> destinations = nodes.stream().filter(n -> n.getType() == Nodeable.Type.DESTINATION).toList();
             assertThat(destinations).as("plan %s has at most one destination", plan.getCode())
                     .hasSizeLessThanOrEqualTo(1);
             if (!destinations.isEmpty()) {
@@ -152,7 +150,7 @@ public final class PlanInvariants {
      */
     public static void assertTrackablesAreDistinct(Collection<TestPlan> plans) {
         List<TestTrackable> assigned = plans.stream().map(TestPlan::getTrackable).filter(java.util.Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
         assertThat(assigned).as("each resource unit serves at most one plan").doesNotHaveDuplicates();
     }
 
@@ -173,7 +171,7 @@ public final class PlanInvariants {
     // ---------------------------------------------------------------- input mutation
 
     public static List<TestPlan> deepCopy(Collection<TestPlan> plans) {
-        return plans.stream().map(TestPlan::copy).collect(Collectors.toList());
+        return plans.stream().map(TestPlan::copy).toList();
     }
 
     /**

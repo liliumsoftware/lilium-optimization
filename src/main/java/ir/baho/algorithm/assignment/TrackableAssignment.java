@@ -51,7 +51,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                     T copy = t.copy();
                     copy.setIndex(value);
                     return copy;
-                }).collect(Collectors.toList())).flatMap(Collection::stream).collect(Collectors.toList());
+                }).toList()).flatMap(Collection::stream).toList();
         this.currentTrackables = new ArrayList<>(this.trackables);
     }
 
@@ -80,7 +80,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
             return false;
         }
         List<T> tempTrackables = new ArrayList<>(this.currentTrackables);
-        tempTrackables.removeAll(plans.stream().map(P::getTrackable).collect(Collectors.toList()));
+        tempTrackables.removeAll(plans.stream().map(P::getTrackable).toList());
         tempTrackables.sort(comparator(plan));
         return this.assign(plan, tempTrackables);
     }
@@ -164,8 +164,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
      * for any other list.
      */
     public boolean wantedIdleUnits(List<P> otherPlans) {
-        if (otherPlans instanceof HeldUnitsOnly) {
-            HeldUnitsOnly<?, ?> restricted = (HeldUnitsOnly<?, ?>) otherPlans;
+        if (otherPlans instanceof HeldUnitsOnly<?, ?> restricted) {
             return restricted.idleWanted;
         }
         return false;
@@ -176,10 +175,9 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
      * Probes copies only; once recorded, later calls return at once.
      */
     private void noteIdleUnitWanted(List<P> otherPlans, List<P> plans) {
-        if (!(otherPlans instanceof HeldUnitsOnly)) {
+        if (!(otherPlans instanceof HeldUnitsOnly<?, ?> restricted)) {
             return;
         }
-        HeldUnitsOnly<?, ?> restricted = (HeldUnitsOnly<?, ?>) otherPlans;
         if (restricted.idleWanted || restricted.idle().isEmpty()) {
             return;
         }
@@ -212,8 +210,8 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
      */
     public List<P> withoutIdleUnits(List<P> otherPlans, List<P> plans) {
         List<T> idle = new ArrayList<>(this.currentTrackables);
-        idle.removeAll(otherPlans.stream().map(P::getTrackable).collect(Collectors.toList()));
-        idle.removeAll(plans.stream().map(P::getTrackable).collect(Collectors.toList()));
+        idle.removeAll(otherPlans.stream().map(P::getTrackable).toList());
+        idle.removeAll(plans.stream().map(P::getTrackable).toList());
         return new HeldUnitsOnly<>(List.copyOf(otherPlans), List.copyOf(idle));
     }
 
@@ -222,7 +220,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
      */
     public boolean hasIdleUnits(List<P> plans) {
         List<T> idle = new ArrayList<>(this.currentTrackables);
-        idle.removeAll(plans.stream().map(P::getTrackable).collect(Collectors.toList()));
+        idle.removeAll(plans.stream().map(P::getTrackable).toList());
         return !idle.isEmpty();
     }
 
@@ -232,9 +230,8 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
      */
     private List<T> available(List<P> otherPlans) {
         List<T> pool = new ArrayList<>(this.currentTrackables);
-        pool.removeAll(otherPlans.stream().map(P::getTrackable).collect(Collectors.toList()));
-        if (otherPlans instanceof HeldUnitsOnly) {
-            HeldUnitsOnly<?, ?> restricted = (HeldUnitsOnly<?, ?>) otherPlans;
+        pool.removeAll(otherPlans.stream().map(P::getTrackable).toList());
+        if (otherPlans instanceof HeldUnitsOnly<?, ?> restricted) {
             @SuppressWarnings("unchecked")
             List<T> idle = (List<T>) restricted.idle();
             pool.removeAll(idle);
@@ -265,7 +262,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
             return false;
         }
         List<T> tempTrackables = new ArrayList<>(trackables);
-        tempTrackables.removeAll(plans.stream().map(P::getTrackable).collect(Collectors.toList()));
+        tempTrackables.removeAll(plans.stream().map(P::getTrackable).toList());
         tempTrackables.sort(comparator(plan));
         return this.assign(plan, tempTrackables);
     }
@@ -385,7 +382,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                 for (int j = i + 1; j < plans.size(); j++) {
                     P firstPlan = plans.get(i);
                     P secondPlan = plans.get(j);
-                    List<P> tempPlans = plans.stream().map(P::copy).collect(Collectors.toList());
+                    List<P> tempPlans = plans.stream().map(P::copy).toList();
                     P tempFirstPlan = tempPlans.get(i);
                     P tempSecondPlan = tempPlans.get(j);
 
@@ -435,7 +432,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                 }
                 TrackableCategory category = getCategory(plan.getTrackable());
                 List<T> idle = trackables.stream().filter(t -> plans.stream()
-                        .noneMatch(p -> t.equals(p.getTrackable()))).collect(Collectors.toList());
+                        .noneMatch(p -> t.equals(p.getTrackable()))).toList();
                 for (T trackable : idle) {
                     if (category.equals(getCategory(trackable))) {
                         continue;
