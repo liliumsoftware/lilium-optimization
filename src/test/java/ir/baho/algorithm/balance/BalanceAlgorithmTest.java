@@ -1,7 +1,9 @@
 package ir.baho.algorithm.balance;
 
 import ir.baho.algorithm.OptimizationType;
+import ir.baho.algorithm.exception.CancelException;
 import ir.baho.algorithm.support.AlwaysFeasibleChecker;
+import ir.baho.algorithm.support.DemandFeasibilityChecker;
 import ir.baho.algorithm.support.MatrixCostCalculation;
 import ir.baho.algorithm.support.PlanInvariants;
 import ir.baho.algorithm.support.TestAssignment;
@@ -16,8 +18,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
@@ -168,6 +172,59 @@ class BalanceAlgorithmTest {
 
     // ---------------------------------------------------------------- capacity balancing
 
+    @Test
+    void pullsWorkOntoPlansBelowTheCapacityFloor() {
+        List<TestNode> customers = customers(5);   // each demands 2
+        MatrixCostCalculation calculation = calculation(customers);
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("full-t", 9), new TestTrackable("empty-t", 9)));
+        List<TestPlan> plans = new ArrayList<>(List.of(
+                plan("full", customers.subList(0, 4), 9),      // load 8
+                plan("empty", customers.subList(4, 5), 9)));   // load 2, below the floor of 4
+
+        List<TestPlan> result = new TestCapacityBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 4).apply(plans);
+
+        assertThat(result).allSatisfy(plan -> assertThat(DemandFeasibilityChecker.load(plan))
+                .as("plan %s reaches the capacity floor", plan.getCode()).isGreaterThanOrEqualTo(4));
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, customers);
+    }
+
+    @Test
+    void plansAlreadyMeetingTheFloorAreLeftAlone() {
+        List<TestNode> customers = customers(4);
+        MatrixCostCalculation calculation = calculation(customers);
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("p1-t", 9), new TestTrackable("p2-t", 9)));
+        List<TestPlan> plans = new ArrayList<>(List.of(
+                plan("p1", customers.subList(0, 2), 9),
+                plan("p2", customers.subList(2, 4), 9)));
+        List<TestPlan> snapshot = PlanInvariants.deepCopy(plans);
+
+        List<TestPlan> result = new TestCapacityBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 4).apply(plans);
+
+        assertThat(result).containsExactlyInAnyOrderElementsOf(snapshot);
+    }
+
+    @Test
+    void anUnreachableFloorStillTerminatesWithoutLosingCustomers() {
+        List<TestNode> customers = customers(3);
+        MatrixCostCalculation calculation = calculation(customers);
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("p1-t", 9), new TestTrackable("p2-t", 9)));
+        List<TestPlan> plans = new ArrayList<>(List.of(
+                plan("p1", customers.subList(0, 2), 9),
+                plan("p2", customers.subList(2, 3), 9)));
+
+        // A floor of 1000 can never be met; the algorithm must give up rather than loop.
+        List<TestPlan> result = assertTimeoutPreemptively(Duration.ofSeconds(30),
+                () -> new TestCapacityBalance(calculation, assignment,
+                        new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 1000).apply(plans));
+
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, customers);
+    }
+
     /**
      * Two small plans next to the depot ([A] and [B, C]) and one far plan of five: the fixture of the bouncing defect.
      */
@@ -177,6 +234,110 @@ class BalanceAlgorithmTest {
         farNodes.addAll(far);
         return new ArrayList<>(List.of(new TestPlan("P1", List.of(origin, near.get(0))),
                 new TestPlan("P2", List.of(origin, near.get(1), near.get(2))), new TestPlan("P3", farNodes)));
+    }
+
+    @Test
+    void onlyADonorThatShrinksTheImbalanceGivesUpACustomer() {
+        // [1, 2, 5] with threshold 2: the cheap move pulls B from P2 into P1, which only swaps the two small plans
+        // ([2, 1, 5]) and repeats until a state recurs, leaving the spread at 4 and the cost higher. Only P3 (at least
+        // two customers more than the receiver) may donate.
+        List<TestNode> near = List.of(TestNode.customer("A", 10, 0, 1), TestNode.customer("B", 12, 0, 1),
+                TestNode.customer("C", 14, 0, 1));
+        List<TestNode> far = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            far.add(TestNode.customer("F" + i, 0, 100 + i, 1));
+        }
+        List<TestNode> all = new ArrayList<>(near);
+        all.addAll(far);
+        MatrixCostCalculation calculation = calculation(all);
+        List<TestPlan> plans = lopsidedPlans(near, far);
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("T1", 10),
+                new TestTrackable("T2", 10), new TestTrackable("T3", 10)));
+        assignment.assign(plans);
+
+        List<TestPlan> result = new TestNodeBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 2).apply(plans);
+
+        assertThat(spread(result)).as("below the threshold of 2").isLessThan(2);
+        assertThat(result).anySatisfy(plan -> assertThat(plan.getCustomers()).contains(near.get(1), near.get(2)));
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, all);
+
+        // Capacity balancing with a floor of 2 (demand 1 each): P2 would drop below the floor if it donated.
+        List<TestPlan> capacityResult = new TestCapacityBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 2).apply(lopsidedPlans(near, far));
+
+        assertThat(capacityResult).allSatisfy(plan -> assertThat(DemandFeasibilityChecker.load(plan))
+                .as("plan %s meets the floor", plan.getCode()).isGreaterThanOrEqualTo(2));
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(capacityResult, all);
+    }
+
+    @Test
+    void balancingDoesNotDependOnThePlansEquality() {
+        // Copies of plans without value equality are never equal to the plans they were copied from; locating plans
+        // and donors by equals used to fail with IndexOutOfBoundsException.
+        List<TestNode> customers = customers(6);
+        MatrixCostCalculation calculation = calculation(customers);
+        for (TestPlan.Equality equality : List.of(TestPlan.Equality.IDENTITY, TestPlan.Equality.CODE)) {
+            TestAssignment assignment = new TestAssignment(List.of(
+                    new TestTrackable("heavy-t", 9), new TestTrackable("light-t", 9)));
+            List<TestPlan> plans = new ArrayList<>(List.of(
+                    plan("heavy", customers.subList(0, 5), 9), plan("light", customers.subList(5, 6), 9)));
+            plans.forEach(plan -> plan.setEquality(equality));
+
+            List<TestPlan> nodeResult = assertTimeoutPreemptively(Duration.ofSeconds(30),
+                    () -> new TestNodeBalance(calculation, assignment,
+                            new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 2).apply(plans));
+            List<TestPlan> capacityResult = assertTimeoutPreemptively(Duration.ofSeconds(30),
+                    () -> new TestCapacityBalance(calculation, assignment,
+                            new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 6).apply(plans));
+
+            assertThat(spread(nodeResult)).as("%s", equality).isLessThan(2);
+            PlanInvariants.assertAllCustomersVisitedExactlyOnce(nodeResult, customers);
+            assertThat(capacityResult).as("%s", equality).allSatisfy(plan ->
+                    assertThat(DemandFeasibilityChecker.load(plan)).isGreaterThanOrEqualTo(6));
+            PlanInvariants.assertAllCustomersVisitedExactlyOnce(capacityResult, customers);
+        }
+    }
+
+    @Test
+    void cancelAbortsAndInterruptStopsBalancingAndBothReachTheInsertion() {
+        List<TestNode> customers = customers(6);
+        MatrixCostCalculation calculation = calculation(customers);
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("heavy-t", 9), new TestTrackable("light-t", 9)));
+        AtomicBoolean insertionCancelled = new AtomicBoolean();
+        AtomicBoolean insertionInterrupted = new AtomicBoolean();
+        TestInsertion insertion = new TestInsertion(calculation, new AlwaysFeasibleChecker(), false) {
+            @Override
+            public void cancel() {
+                insertionCancelled.set(true);
+                super.cancel();
+            }
+
+            @Override
+            public void interrupt() {
+                insertionInterrupted.set(true);
+                super.interrupt();
+            }
+        };
+        List<TestPlan> plans = new ArrayList<>(List.of(
+                plan("heavy", customers.subList(0, 5), 9), plan("light", customers.subList(5, 6), 9)));
+        List<TestPlan> snapshot = PlanInvariants.deepCopy(plans);
+
+        TestNodeBalance interrupted = new TestNodeBalance(calculation, assignment, insertion, 1);
+        interrupted.interrupt();
+        assertThat(interrupted.apply(plans)).as("an interrupted balance keeps its best state so far")
+                .isEqualTo(snapshot);
+        assertThat(insertionInterrupted).isTrue();
+
+        TestCapacityBalance cancelled = new TestCapacityBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 6);
+        cancelled.cancel();
+        assertThatThrownBy(() -> cancelled.apply(plans)).isInstanceOf(CancelException.class);
+        TestNodeBalance cancelledNode = new TestNodeBalance(calculation, assignment, insertion, 1);
+        cancelledNode.cancel();
+        assertThatThrownBy(() -> cancelledNode.apply(plans)).isInstanceOf(CancelException.class);
+        assertThat(insertionCancelled).isTrue();
     }
 
     @Test
