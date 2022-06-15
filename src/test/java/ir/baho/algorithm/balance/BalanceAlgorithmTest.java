@@ -7,6 +7,7 @@ import ir.baho.algorithm.support.DemandFeasibilityChecker;
 import ir.baho.algorithm.support.MatrixCostCalculation;
 import ir.baho.algorithm.support.PlanInvariants;
 import ir.baho.algorithm.support.TestAssignment;
+import ir.baho.algorithm.support.TestCapacityBalance;
 import ir.baho.algorithm.support.TestInsertion;
 import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestNodeBalance;
