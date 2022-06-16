@@ -19,6 +19,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - k-medoids re-seeding of routes (`AbstractKMedoidsAlgorithm`).
 - balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
 - splitting of stops too large for any resource (`AbstractSplitAlgorithm`, `AbstractBigNodeSplitAlgorithm`).
+- balancing of capacity usage between routes (`AbstractCapacityBalanceAlgorithm`).
 
 ## Requirements
 
