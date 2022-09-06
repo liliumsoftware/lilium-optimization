@@ -20,6 +20,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
 - splitting of stops too large for any resource (`AbstractSplitAlgorithm`, `AbstractBigNodeSplitAlgorithm`).
 - balancing of capacity usage between routes (`AbstractCapacityBalanceAlgorithm`).
+- un-merging of routes along zone boundaries (`AbstractSingleUnMergeAlgorithm`, `AbstractDoubleUnMergeAlgorithm`).
 
 ## Requirements
 
