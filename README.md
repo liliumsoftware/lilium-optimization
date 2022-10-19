@@ -19,11 +19,13 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - k-medoids re-seeding of routes (`AbstractKMedoidsAlgorithm`).
 - balancing of customer counts between routes (`AbstractNodeBalanceAlgorithm`).
 - splitting of stops too large for any resource (`AbstractSplitAlgorithm`, `AbstractBigNodeSplitAlgorithm`).
+- balancing of capacity usage between routes (`AbstractCapacityBalanceAlgorithm`).
+- un-merging of routes along zone boundaries (`AbstractSingleUnMergeAlgorithm`, `AbstractDoubleUnMergeAlgorithm`).
 
 ## Requirements
 
 - Java 17 or newer.
-- Apache Maven 3.8.5 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.8.6 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -31,7 +33,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
