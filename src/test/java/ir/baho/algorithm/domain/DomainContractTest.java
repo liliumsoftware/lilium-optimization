@@ -103,6 +103,15 @@ class DomainContractTest {
         assertThat(copy).as("a mutated copy no longer equals its source").isNotEqualTo(plan);
     }
 
+    @Test
+    void anInvalidNodeIsACustomerCarryingItsCause() {
+        TestInvalidNode invalid = new TestInvalidNode("X", "Z1", "demand.must.be.positive");
+
+        assertThat(invalid.getType()).isEqualTo(Nodeable.Type.CUSTOMER);
+        assertThat(invalid.getCause()).isEqualTo("demand.must.be.positive");
+        assertThat(invalid.copy()).isEqualTo(invalid);
+    }
+
     // ---------------------------------------------------------------- Nodeable / InvalidNodeable
 
     @Test
