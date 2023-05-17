@@ -1,5 +1,6 @@
 package ir.baho.algorithm.domain;
 
+import ir.baho.algorithm.support.TestInvalidNode;
 import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestPlan;
 import ir.baho.algorithm.support.TestTrackable;
