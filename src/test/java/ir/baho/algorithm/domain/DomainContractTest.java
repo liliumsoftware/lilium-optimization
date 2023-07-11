@@ -1,5 +1,6 @@
 package ir.baho.algorithm.domain;
 
+import ir.baho.algorithm.support.TestInvalidNode;
 import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestPlan;
 import ir.baho.algorithm.support.TestTrackable;
@@ -101,6 +102,15 @@ class DomainContractTest {
         copy.getNodes().add(customerB);
         assertThat(plan.getNodes()).as("the source node list is untouched").containsExactly(origin, customerA);
         assertThat(copy).as("a mutated copy no longer equals its source").isNotEqualTo(plan);
+    }
+
+    @Test
+    void anInvalidNodeIsACustomerCarryingItsCause() {
+        TestInvalidNode invalid = new TestInvalidNode("X", "Z1", "demand.must.be.positive");
+
+        assertThat(invalid.getType()).isEqualTo(Nodeable.Type.CUSTOMER);
+        assertThat(invalid.getCause()).isEqualTo("demand.must.be.positive");
+        assertThat(invalid.copy()).isEqualTo(invalid);
     }
 
     // ---------------------------------------------------------------- Nodeable / InvalidNodeable

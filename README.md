@@ -21,11 +21,13 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - splitting of stops too large for any resource (`AbstractSplitAlgorithm`, `AbstractBigNodeSplitAlgorithm`).
 - balancing of capacity usage between routes (`AbstractCapacityBalanceAlgorithm`).
 - un-merging of routes along zone boundaries (`AbstractSingleUnMergeAlgorithm`, `AbstractDoubleUnMergeAlgorithm`).
+- partial-fleet re-planning (`AbstractPartialClarkeWrightAlgorithm`).
+- pre-planning validation of stops (`ValidationChecker`).
 
 ## Requirements
 
 - Java 17 or newer.
-- Apache Maven 3.8.6 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.9.0 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -33,7 +35,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>2.1.0</version>
+    <version>2.2.0</version>
 </dependency>
 ```
 
