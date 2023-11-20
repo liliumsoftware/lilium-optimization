@@ -12,12 +12,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>17</maven.compiler.release>
         <maven.compiler.version>3.11.0</maven.compiler.version>
-        <maven.surefire.version>3.0.0</maven.surefire.version>
-        <lombok.version>1.18.28</lombok.version>
+        <maven.surefire.version>3.2.2</maven.surefire.version>
+        <maven.jar.version>3.3.0</maven.jar.version>
+        <maven.source.version>3.3.0</maven.source.version>
+        <maven.javadoc.version>3.6.0</maven.javadoc.version>
+        <lombok.version>1.18.30</lombok.version>
         <slf4j.version>2.0.7</slf4j.version>
         <jackson.version>2.15.2</jackson.version>
-        <junit.version>5.9.2</junit.version>
+        <junit.version>5.10.1</junit.version>
         <assertj.version>3.24.2</assertj.version>
+        <jacoco.version>0.8.11</jacoco.version>
         <maven.checkstyle.version>3.2.1</maven.checkstyle.version>
         <checkstyle.version>10.9.3</checkstyle.version>
     </properties>
@@ -107,7 +111,74 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>${maven.jar.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>${maven.source.version}</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>${maven.javadoc.version}</version>
+                <configuration>
+                    <doclint>all,-missing</doclint>
+                    <quiet>true</quiet>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Opt-in coverage: ./mvnw -Pcoverage test (HTML/CSV report under target/site/jacoco).
+             Kept in a profile so the default build - and the CI package/deploy - stay untouched. -->
+        <profile>
+            <id>coverage</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-agent</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>report</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

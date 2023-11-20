@@ -47,6 +47,12 @@ Runtime dependencies to add to your project: `org.slf4j:slf4j-api` and, for the 
 ./mvnw clean install
 ```
 
+Run the tests with a coverage report:
+
+```bash
+./mvnw -Pcoverage test   # report under target/site/jacoco
+```
+
 ## Contracts the algorithms rely on
 
 - Call `PathCostCalculation#initializeCostMatrix` with every node (depots and customers) before any algorithm runs.
