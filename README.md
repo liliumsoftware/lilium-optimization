@@ -23,6 +23,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - un-merging of routes along zone boundaries (`AbstractSingleUnMergeAlgorithm`, `AbstractDoubleUnMergeAlgorithm`).
 - partial-fleet re-planning (`AbstractPartialClarkeWrightAlgorithm`).
 - pre-planning validation of stops (`ValidationChecker`).
+- second-dispatch assignment for resources that return and go out again (`SecondDispatchTrackableAssignment`).
 
 ## Requirements
 
