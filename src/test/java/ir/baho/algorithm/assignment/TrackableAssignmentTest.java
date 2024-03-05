@@ -468,6 +468,25 @@ class TrackableAssignmentTest {
     }
 
     @Test
+    void alternativeFinderListsInterchangeableResourcesExcludingItself() {
+        TestTrackable target = new TestTrackable("A", 5);
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                target, new TestTrackable("B", 5), new TestTrackable("C", 9)));
+
+        assertThat(finder.getAlternatives(target)).containsExactly("B");
+        assertThat(finder.getAlternatives(new TestTrackable("D", 1))).isEmpty();
+    }
+
+    @Test
+    void alternativeFinderExcludesEveryResourceSharingTheGivenCode() {
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                new TestTrackable("A", 5), new TestTrackable("A", 5)));
+
+        assertThat(finder.getAlternatives(new TestTrackable("A", 5)))
+                .as("identity is by code, so same-code units are never their own alternative").isEmpty();
+    }
+
+    @Test
     void theInfiniteFleetHandsTheAssignmentHookAPrivateModifiableListInEveryOverload() {
         // Some overloads passed the unmodifiable fleet itself, others a copy: a hook that orders the list it is given
         // (as the finite variant's lists allow) failed with UnsupportedOperationException in the first group only.
