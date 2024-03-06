@@ -8,6 +8,7 @@ import ir.baho.algorithm.support.TestAssignment;
 import ir.baho.algorithm.support.TestInfiniteAssignment;
 import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestPlan;
+import ir.baho.algorithm.support.TestSecondDispatchAssignment;
 import ir.baho.algorithm.support.TestTrackable;
 import org.junit.jupiter.api.Test;
 
