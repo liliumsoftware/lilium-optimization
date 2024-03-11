@@ -4,6 +4,7 @@ import ir.baho.algorithm.domain.TrackableCategory;
 import ir.baho.algorithm.support.CapacityRules;
 import ir.baho.algorithm.support.PlanInvariants;
 import ir.baho.algorithm.support.SpeedAwareAssignment;
+import ir.baho.algorithm.support.TestAlternativeFinder;
 import ir.baho.algorithm.support.TestAssignment;
 import ir.baho.algorithm.support.TestInfiniteAssignment;
 import ir.baho.algorithm.support.TestNode;
@@ -541,6 +542,25 @@ class TrackableAssignmentTest {
         assertThat(other.getTrackable()).isEqualTo(unit(assignment.getTrackables(), "T2#0"));
         assertThat(assignment.assign(List.of(other), plans)).as("the only unit is already in use").isFalse();
         assertThat(plans.get(0).getTrackable()).isNull();
+    }
+
+    @Test
+    void alternativeFinderListsInterchangeableResourcesExcludingItself() {
+        TestTrackable target = new TestTrackable("A", 5);
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                target, new TestTrackable("B", 5), new TestTrackable("C", 9)));
+
+        assertThat(finder.getAlternatives(target)).containsExactly("B");
+        assertThat(finder.getAlternatives(new TestTrackable("D", 1))).isEmpty();
+    }
+
+    @Test
+    void alternativeFinderExcludesEveryResourceSharingTheGivenCode() {
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                new TestTrackable("A", 5), new TestTrackable("A", 5)));
+
+        assertThat(finder.getAlternatives(new TestTrackable("A", 5)))
+                .as("identity is by code, so same-code units are never their own alternative").isEmpty();
     }
 
     @Test
