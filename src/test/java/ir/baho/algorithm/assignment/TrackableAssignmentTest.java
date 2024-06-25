@@ -4,10 +4,12 @@ import ir.baho.algorithm.domain.TrackableCategory;
 import ir.baho.algorithm.support.CapacityRules;
 import ir.baho.algorithm.support.PlanInvariants;
 import ir.baho.algorithm.support.SpeedAwareAssignment;
+import ir.baho.algorithm.support.TestAlternativeFinder;
 import ir.baho.algorithm.support.TestAssignment;
 import ir.baho.algorithm.support.TestInfiniteAssignment;
 import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestPlan;
+import ir.baho.algorithm.support.TestSecondDispatchAssignment;
 import ir.baho.algorithm.support.TestTrackable;
 import org.junit.jupiter.api.Test;
 
@@ -403,6 +405,81 @@ class TrackableAssignmentTest {
     }
 
     @Test
+    void secondDispatchPoolKeepsOnlyResourcesThatMayRunTwice() {
+        TestTrackable returning = new TestTrackable("returning", 5, 1, true);
+        TestTrackable oneWay = new TestTrackable("one-way", 5, 1, false);
+        TestSecondDispatchAssignment assignment = new TestSecondDispatchAssignment(List.of(returning, oneWay));
+
+        TestPlan firstRun = plan("first", 1);
+        firstRun.setTrackable(unit(assignment.currentTrackables(), "one-way#0"));
+        TestPlan returningRun = plan("second", 1);
+        returningRun.setTrackable(unit(assignment.currentTrackables(), "returning#0"));
+
+        assignment.secondDispatchOnly(List.of(firstRun, returningRun));
+
+        // A resource already used by a plan may only stay in the pool when it supports a second dispatch,
+        // which requires isReturns(); the one-way vehicle is therefore dropped.
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::getCode)
+                .contains("returning").doesNotContain("one-way");
+    }
+
+    @Test
+    void secondDispatchSeparatesEachResourceFirstRunFromItsSecond() {
+        TestTrackable vehicle = new TestTrackable("V", 5, 1, true);
+        TestSecondDispatchAssignment assignment = new TestSecondDispatchAssignment(List.of(vehicle));
+        TestTrackable unit = unit(assignment.currentTrackables(), "V#0");
+
+        TestPlan firstRun = plan("first", 1);
+        firstRun.setTrackable(unit);
+        TestPlan secondRun = plan("second", 1);
+        secondRun.setTrackable(unit.copy());
+        secondRun.setSecondDispatch(true);
+        TestPlan extra = plan("extra", 1);
+
+        List<TestPlan> toPlan = assignment.secondDispatchAndOthers(
+                new ArrayList<>(List.of(firstRun, secondRun)), List.of(extra));
+
+        // The vehicle's first run is withheld (it is already committed); its second run plus the newly supplied
+        // plans are what remains to be planned.
+        assertThat(toPlan).contains(secondRun, extra).doesNotContain(firstRun);
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::getCode).contains("V");
+    }
+
+    @Test
+    void secondDispatchOnlyKeepsTheUnusedUnitsOfAMultiUnitResource() {
+        // Expanded units share their code; only the unit a plan actually used may be replaced by its re-dispatch
+        // copy. Matching by code alone used to drop the idle siblings from the pool.
+        TestSecondDispatchAssignment assignment = new TestSecondDispatchAssignment(
+                List.of(new TestTrackable("V", 5, 3, true)));
+        TestPlan firstRun = plan("first", 1);
+        firstRun.setTrackable(unit(assignment.currentTrackables(), "V#0"));
+
+        assignment.secondDispatchOnly(List.of(firstRun));
+
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::toString)
+                .containsExactlyInAnyOrder("V#0", "V#1", "V#2");
+    }
+
+    @Test
+    void secondDispatchAndOthersKeepsTheUnusedUnitsOfAMultiUnitResource() {
+        TestSecondDispatchAssignment assignment = new TestSecondDispatchAssignment(
+                List.of(new TestTrackable("V", 5, 3, true)));
+        TestTrackable used = unit(assignment.currentTrackables(), "V#0");
+        TestPlan firstRun = plan("first", 1);
+        firstRun.setTrackable(used);
+        TestPlan secondRun = plan("second", 1);
+        secondRun.setTrackable(used.copy());
+        secondRun.setSecondDispatch(true);
+
+        List<TestPlan> toPlan = assignment.secondDispatchAndOthers(new ArrayList<>(List.of(firstRun, secondRun)),
+                List.of());
+
+        assertThat(toPlan).containsExactly(secondRun);
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::toString)
+                .containsExactlyInAnyOrder("V#0", "V#1", "V#2");
+    }
+
+    @Test
     void infiniteAssignmentPrefersTheUnitTheComparatorRanksFirst() {
         // Smallest-fitting-first: a one-customer plan takes the small unit even though the big one comes first in the
         // fleet, in every overload, as the finite variant does.
@@ -465,6 +542,44 @@ class TrackableAssignmentTest {
         assertThat(other.getTrackable()).isEqualTo(unit(assignment.getTrackables(), "T2#0"));
         assertThat(assignment.assign(List.of(other), plans)).as("the only unit is already in use").isFalse();
         assertThat(plans.get(0).getTrackable()).isNull();
+    }
+
+    @Test
+    void alternativeFinderListsInterchangeableResourcesExcludingItself() {
+        TestTrackable target = new TestTrackable("A", 5);
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                target, new TestTrackable("B", 5), new TestTrackable("C", 9)));
+
+        assertThat(finder.getAlternatives(target)).containsExactly("B");
+        assertThat(finder.getAlternatives(new TestTrackable("D", 1))).isEmpty();
+    }
+
+    @Test
+    void alternativeFinderExcludesEveryResourceSharingTheGivenCode() {
+        TestAlternativeFinder finder = new TestAlternativeFinder(List.of(
+                new TestTrackable("A", 5), new TestTrackable("A", 5)));
+
+        assertThat(finder.getAlternatives(new TestTrackable("A", 5)))
+                .as("identity is by code, so same-code units are never their own alternative").isEmpty();
+    }
+
+    @Test
+    void aUnitHeldByAFirstAndASecondRunIsOfferedOnceForTheNextRound() {
+        // Both runs of T contributed T to the narrowed pool, so it held T twice and two new plans both got it.
+        TestSecondDispatchAssignment assignment = new TestSecondDispatchAssignment(List.of(
+                new TestTrackable("T", 10, 1, true)));
+        TestPlan firstRun = plan("first", 1);
+        assertThat(assignment.assign(List.of(firstRun))).isTrue();
+        TestPlan secondRun = plan("second", 1);
+        secondRun.setSecondDispatch(true);
+        secondRun.setTrackable(firstRun.getTrackable().copy());
+
+        assignment.secondDispatchOnly(List.of(firstRun, secondRun));
+
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::toString).containsExactly("T#0");
+        List<TestPlan> next = List.of(plan("x", 1), plan("y", 1));
+        assertThat(assignment.assign(next)).as("one vehicle cannot run both new plans").isFalse();
+        PlanInvariants.assertTrackablesAreDistinct(next);
     }
 
     @Test

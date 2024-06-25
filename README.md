@@ -23,11 +23,13 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - un-merging of routes along zone boundaries (`AbstractSingleUnMergeAlgorithm`, `AbstractDoubleUnMergeAlgorithm`).
 - partial-fleet re-planning (`AbstractPartialClarkeWrightAlgorithm`).
 - pre-planning validation of stops (`ValidationChecker`).
+- second-dispatch assignment for resources that return and go out again (`SecondDispatchTrackableAssignment`).
+- substitute-resource lookup (`TrackableAlternativeFinder`).
 
 ## Requirements
 
 - Java 17 or newer.
-- Apache Maven 3.9.0 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.9.6 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -35,7 +37,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>2.2.0</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 
@@ -45,6 +47,12 @@ Runtime dependencies to add to your project: `org.slf4j:slf4j-api` and, for the 
 
 ```bash
 ./mvnw clean install
+```
+
+Run the tests with a coverage report:
+
+```bash
+./mvnw -Pcoverage test   # report under target/site/jacoco
 ```
 
 ## Contracts the algorithms rely on
