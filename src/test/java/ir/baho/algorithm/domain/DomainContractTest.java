@@ -142,7 +142,72 @@ class DomainContractTest {
 
     // ---------------------------------------------------------------- Trackable defaults
 
+    @Test
+    void binGeometryHelpersUseLongArithmetic() {
+        // 100000 × 100000 = 10^10 overflows an int; the defaults must widen before multiplying.
+        TestBin large = new TestBin("large", 100_000, 100_000, 100_000);
+
+        assertThat(large.getArea()).isEqualTo(10_000_000_000L);
+        assertThat(large.getVolume()).isEqualTo(1_000_000_000_000_000L);
+
+        TestBin small = new TestBin("small", 2, 3, 4);
+        assertThat(small.getArea()).isEqualTo(6);
+        assertThat(small.getVolume()).isEqualTo(24);
+    }
+
+    @Test
+    void aBinCopyEqualsItsSourceAndKeepsItsIndex() {
+        TestBin bin = new TestBin("b", 1, 2, 3);
+        bin.setIndex(4);
+
+        TestBin copy = bin.copy();
+
+        assertThat(copy).isEqualTo(bin).isNotSameAs(bin);
+        assertThat(copy.getIndex()).isEqualTo(4);
+    }
+
+    @Test
+    void aContainerReportsItsDimensionsAndCopiesByValue() {
+        TestContainer container = new TestContainer(10, 20, 30);
+
+        assertThat(container.getLength()).isEqualTo(10);
+        assertThat(container.getWidth()).isEqualTo(20);
+        assertThat(container.getHeight()).isEqualTo(30);
+        assertThat(container.copy()).isEqualTo(container);
+    }
+
     // ---------------------------------------------------------------- Bin / Container defaults
+
+    @Test
+    void aBinThatWasNeverIndexedReportsTheIndexOfTheFirstPackedCopy() {
+        // BinPacking#getCount numbers its copies 0 .. k-1, as the assignment layer numbers trackable units; the Bin
+        // default used to be 1, matching no packed copy.
+        record UnitBox(int side) implements Bin<UnitBox> {
+            @Override
+            public int getLength() {
+                return side;
+            }
+
+            @Override
+            public int getWidth() {
+                return side;
+            }
+
+            @Override
+            public int getHeight() {
+                return side;
+            }
+
+            @Override
+            public UnitBox copy() {
+                return new UnitBox(side);
+            }
+        }
+
+        UnitBox bin = new UnitBox(1);
+
+        assertThat(bin.getIndex()).isZero();
+    }
 
     @Test
     void planModifiersAreAppliedToEveryPlanAndTolerateANullList() {
