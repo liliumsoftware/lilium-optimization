@@ -25,6 +25,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - pre-planning validation of stops (`ValidationChecker`).
 - second-dispatch assignment for resources that return and go out again (`SecondDispatchTrackableAssignment`).
 - substitute-resource lookup (`TrackableAlternativeFinder`).
+- a shelf heuristic for packing boxes into a container (`BinPacking`).
 
 ## Requirements
 
