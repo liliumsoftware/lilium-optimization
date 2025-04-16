@@ -25,11 +25,12 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 - pre-planning validation of stops (`ValidationChecker`).
 - second-dispatch assignment for resources that return and go out again (`SecondDispatchTrackableAssignment`).
 - substitute-resource lookup (`TrackableAlternativeFinder`).
+- a shelf heuristic for packing boxes into a container (`BinPacking`).
 
 ## Requirements
 
 - Java 17 or newer.
-- Apache Maven 3.9.6 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.9.9 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
@@ -37,7 +38,7 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 <dependency>
     <groupId>ir.baho</groupId>
     <artifactId>baho-algorithm</artifactId>
-    <version>2.3.0</version>
+    <version>2.4.0</version>
 </dependency>
 ```
 
