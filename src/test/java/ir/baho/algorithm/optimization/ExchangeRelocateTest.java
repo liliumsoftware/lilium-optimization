@@ -512,4 +512,35 @@ class ExchangeRelocateTest {
         }
     }
 
+    @Test
+    void relocateByInsertionCanDonateFromTheTailOfTheSecondPlan() {
+        // Regression: for INSERTION the reverse direction only ever offered the second plan's segment at index 1,
+        // so a misplaced customer further down that plan could never move into the first plan. The fleet (two
+        // and three seats) blocks pushing p1's customer into p2 (four stops), p2's first two stops are the far pair
+        // whose transfer would not pay, and p2's only misplaced stop is its last one.
+        MatrixCostCalculation calculation = calculation();
+        TestPlan first = new TestPlan("p1", List.of(origin, near1));
+        TestPlan second = new TestPlan("p2", List.of(origin, far1, far2, near2));
+        first.setTrackable(new TestTrackable("T1", 2));
+        second.setTrackable(new TestTrackable("T2", 3));
+        calculation.calculateCost(first);
+        calculation.calculateCost(second);
+        List<TestPlan> plans = new ArrayList<>(List.of(first, second));
+        assertThat(PlanInvariants.referenceTotalCost(plans)).isEqualTo(10 + 1000 + 10 + 990);
+        TestAssignment fleet = new TestAssignment(List.of(new TestTrackable("T1", 2), new TestTrackable("T2", 3)));
+
+        TestRelocate relocate = new TestRelocate(calculation, fleet, new RecostingLocalSearch(calculation),
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false),
+                ExchangeRelocateType.INSERTION, 4, 1);
+
+        List<TestPlan> result = relocate.apply(plans);
+
+        // Moving near2 next to near1 alone gives 20 + 1010 = 1030; the restarted scan may then find the even cheaper
+        // layout [O, near1] + [O, near2, far1, far2] = 1020. Either way the stranded 2010 must be left behind.
+        assertThat(PlanInvariants.referenceTotalCost(result)).isLessThanOrEqualTo(1030);
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, near2, far1, far2));
+        PlanInvariants.assertTrackablesAreDistinct(result);
+        PlanInvariants.assertCustomerCountWithinCapacity(result);
+    }
+
 }
