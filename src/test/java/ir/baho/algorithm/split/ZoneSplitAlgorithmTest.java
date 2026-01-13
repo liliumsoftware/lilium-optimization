@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Pins how plans are partitioned into independent, non-interacting zone groups for parallel optimization.
@@ -79,6 +80,23 @@ class ZoneSplitAlgorithmTest {
 
         assertThat(groups).hasSize(1);
         assertThat(groups.get(0)).containsExactlyInAnyOrder(z1, z2, z3);
+    }
+
+    @Test
+    void aMaxSplitCountBelowOneIsRejectedUpFront() {
+        // Regression: a non-positive cap used to surface as NoSuchElementException from deep inside group().
+        MatrixCostCalculation calc = new MatrixCostCalculation();
+        assertThatThrownBy(() -> new ZoneSplitAlgorithm<>(calc, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxSplitCount");
+        assertThatThrownBy(() -> new ZoneSplitAlgorithm<>(calc, -3))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void anEmptyPlanListYieldsNoGroups() {
+        assertThat(new ZoneSplitAlgorithm<>(new MatrixCostCalculation(), 4).groups(List.of())).isEmpty();
+        assertThat(new ZoneSplitAlgorithm<>(new MatrixCostCalculation(), 4).split(List.of())).isEmpty();
     }
 
 }
