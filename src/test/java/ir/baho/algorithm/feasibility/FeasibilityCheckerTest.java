@@ -117,4 +117,18 @@ class FeasibilityCheckerTest {
         assertThat(new AlwaysFeasibleChecker().getErrors(List.of())).isEmpty();
     }
 
+    @Test
+    void errorsForAPlanWithoutAResourceAreBoundToThePlanCode() {
+        // Regression: getErrors dereferenced the trackable unconditionally and threw NullPointerException for a
+        // plan that had not been assigned yet.
+        DemandFeasibilityChecker checker = new DemandFeasibilityChecker(5);
+        TestPlan unassigned = plan("loose", TestNode.customer("B", 0, 20, 9));
+        unassigned.setTrackable(null);
+
+        List<ObjectError> errors = checker.getErrors(List.of(unassigned));
+
+        assertThat(errors).hasSize(1);
+        assertThat(errors.get(0).objectName()).isEqualTo("loose");
+    }
+
 }
