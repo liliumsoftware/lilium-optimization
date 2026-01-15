@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -246,6 +247,23 @@ class RoutingProviderTest {
     }
 
     @Test
+    void coordinatesUseADotDecimalSeparatorWhateverTheDefaultLocaleIs() {
+        // Regression: the coordinate formatter used the JVM default locale, so under a comma-decimal locale the
+        // request became /route/v1/driving/4,5,52,25 - a well-formed URL asking OSRM for the wrong place.
+        Locale previous = Locale.getDefault();
+        Locale.setDefault(Locale.GERMANY);
+        try {
+            responseBody.set("{\"routes\":[{\"duration\":1}]}");
+
+            provider.getDuration(List.of(new Point(4.5, 52.25), new Point(-0.125, 51.5)));
+
+            assertThat(requestedUri.get().getPath()).isEqualTo("/route/v1/driving/4.5,52.25;-0.125,51.5");
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
     void invalidCoordinatesAreRejectedBeforeAnyRequestIsSent() {
         // NaN and infinity were formatted into the URL as "NaN" / "∞", and a longitude of 1234.5 was silently
         // truncated to 234.5 by the three-integer-digit formatter.
@@ -329,6 +347,72 @@ class RoutingProviderTest {
         responseBody.set("{\"durations\":[[0,\"x\"],[1,0]]}");
         assertThatThrownBy(() -> provider.getCostMatrix(points)).isInstanceOf(RoutingException.class)
                 .hasMessageContaining("not a number");
+    }
+
+    @Test
+    void coordinateFormattingIsSafeAcrossThreads() throws Exception {
+        // Regression: a single shared DecimalFormat is not thread-safe; parallel zone groups call the provider.
+        // Every request the fake server received must be one of the exact expected URLs, each sent exactly as often
+        // as its thread sent it; a garbled coordinate or a lost request fails the comparison.
+        responseBody.set("{\"routes\":[{\"duration\":1}]}");
+        requestedPaths.clear();
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+        List<String> expected = new ArrayList<>();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            double lon = 10 + i * 0.125;
+            String path = "/route/v1/driving/" + plain(lon) + ",50.5;" + plain(lon + 1) + ",51.5";
+            for (int n = 0; n < 20; n++) {
+                expected.add(path);
+            }
+            threads.add(startThread(() -> {
+                try {
+                    for (int n = 0; n < 20; n++) {
+                        assertThat(provider.getDuration(List.of(new Point(lon, 50.5), new Point(lon + 1, 51.5))))
+                                .isEqualTo(1000);
+                    }
+                } catch (Throwable t) {
+                    failures.add(t);
+                }
+            }));
+        }
+        for (Thread thread : threads) {
+            thread.join();
+        }
+
+        assertThat(failures).isEmpty();
+        assertThat(requestedPaths).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    void aBodyWithoutRoutesBecomesRoutingExceptionNotNullPointer() {
+        // OSRM answers {"code":"NoRoute", ...} when no route exists; that must surface as the documented exception.
+        responseBody.set("{\"code\":\"NoRoute\",\"message\":\"Impossible route between points\"}");
+
+        assertThatThrownBy(() -> provider.getRoute(new Point(1.0, 2.0), new Point(3.0, 4.0)))
+                .isInstanceOf(RoutingException.class);
+        assertThatThrownBy(() -> provider.getDuration(List.of(new Point(1.0, 2.0))))
+                .isInstanceOf(RoutingException.class);
+        assertThatThrownBy(() -> provider.getDistance(List.of(new Point(1.0, 2.0))))
+                .isInstanceOf(RoutingException.class);
+        assertThatThrownBy(() -> provider.getCostMatrix(List.of(new Point(1.0, 2.0))))
+                .isInstanceOf(RoutingException.class);
+
+        responseBody.set("{\"routes\":[]}");
+        assertThatThrownBy(() -> provider.getDuration(List.of(new Point(1.0, 2.0))))
+                .isInstanceOf(RoutingException.class)
+                .hasMessageContaining("no route");
+
+        responseBody.set("{\"routes\":[{\"weight\":1}]}");
+        assertThatThrownBy(() -> provider.getDistance(List.of(new Point(1.0, 2.0))))
+                .isInstanceOf(RoutingException.class)
+                .hasMessageContaining("distance");
+    }
+
+    private static Thread startThread(Runnable task) {
+        Thread thread = new Thread(task);
+        thread.start();
+        return thread;
     }
 
 }
