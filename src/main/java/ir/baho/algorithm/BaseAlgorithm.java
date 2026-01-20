@@ -28,12 +28,16 @@ import java.util.Set;
  *
  * <p>Composite algorithms that own nested algorithms override {@link #cancel()} and {@link #interrupt()} to propagate
  * the signals. Note {@link #checkCancel()} also treats a pending thread interrupt as a cancel; the thread's interrupt
- * status is left set, so code further up the stack still sees it.
+ * status is left set, so code further up the stack still sees it. Both signals are safe to raise from a different
+ * thread than the one running the algorithm; instances are otherwise not thread-safe and must not run
+ * concurrently.
  */
 public abstract class BaseAlgorithm {
 
-    private boolean cancel = false;
-    private boolean interrupt = false;
+    // volatile: both flags are set from another thread (the one that owns the run) and polled from inside
+    // the algorithm's hot loops; without volatile the poll may never observe the write.
+    private volatile boolean cancel = false;
+    private volatile boolean interrupt = false;
 
     /**
      * Rejects a customer batch in which two nodes share a code. Codes identify customers (see {@link Nodeable}), and

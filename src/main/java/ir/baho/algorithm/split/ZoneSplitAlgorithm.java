@@ -3,7 +3,6 @@ package ir.baho.algorithm.split;
 import ir.baho.algorithm.calculation.PathCostCalculation;
 import ir.baho.algorithm.domain.Nodeable;
 import ir.baho.algorithm.domain.Planable;
-import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,11 +22,24 @@ import java.util.stream.Collectors;
  * bin-fit). {@link #groups} returns the groups in the order of their first plan; {@link ZoneGroups} runs an optimizer
  * over them in parallel against one shared fleet.
  */
-@RequiredArgsConstructor
 public class ZoneSplitAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<N>> {
 
     private final PathCostCalculation<P, N, ?> costCalculation;
     private final int maxSplitCount;
+
+    /**
+     * Creates a splitter over the zone predicates of {@code costCalculation}.
+     *
+     * @param maxSplitCount upper bound on the number of groups returned; at least {@code 1}
+     * @throws IllegalArgumentException if {@code maxSplitCount < 1}
+     */
+    public ZoneSplitAlgorithm(PathCostCalculation<P, N, ?> costCalculation, int maxSplitCount) {
+        if (maxSplitCount < 1) {
+            throw new IllegalArgumentException("maxSplitCount must be at least 1, was " + maxSplitCount);
+        }
+        this.costCalculation = costCalculation;
+        this.maxSplitCount = maxSplitCount;
+    }
 
     /**
      * The zones a plan occupies: its customers' zones, or its own zone when it has no customers.

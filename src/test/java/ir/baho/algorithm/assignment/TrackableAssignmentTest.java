@@ -12,12 +12,16 @@ import ir.baho.algorithm.support.TestPlan;
 import ir.baho.algorithm.support.TestSecondDispatchAssignment;
 import ir.baho.algorithm.support.TestTrackable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * The assignment layer is the gate every accepted move must pass: an inter-plan move is committed only if
@@ -480,6 +484,27 @@ class TrackableAssignmentTest {
     }
 
     @Test
+    void exchangeRepeatsForPlansEqualByCodeToo() {
+        // The repair loops also stopped when the plan list equalled an earlier snapshot; plans equal by code made
+        // every snapshot equal, so exchange ended after one pass at 580 instead of the optimum 520.
+        SpeedAwareAssignment assignment = new SpeedAwareAssignment(List.of(
+                new TestTrackable("v2", 2), new TestTrackable("v3", 3),
+                new TestTrackable("v5", 5), new TestTrackable("v7", 7)));
+        List<TestPlan> plans = new ArrayList<>(List.of(planOfLength("p10", 10), planOfLength("p50", 50),
+                planOfLength("p20", 20), planOfLength("p100", 100)));
+        String[] units = {"v2", "v3", "v5", "v7"};
+        for (int i = 0; i < plans.size(); i++) {
+            plans.get(i).setEquality(TestPlan.Equality.CODE);
+            assignment.assignWithTrackable(plans.get(i), unit(assignment.getTrackables(), units[i] + "#0"));
+        }
+
+        assignment.repairExchange(plans);
+
+        assertThat(plans.stream().mapToLong(TestPlan::getCost).sum()).isEqualTo(520);
+        PlanInvariants.assertTrackablesAreDistinct(plans);
+    }
+
+    @Test
     void infiniteAssignmentPrefersTheUnitTheComparatorRanksFirst() {
         // Smallest-fitting-first: a one-customer plan takes the small unit even though the big one comes first in the
         // fleet, in every overload, as the finite variant does.
@@ -561,6 +586,135 @@ class TrackableAssignmentTest {
 
         assertThat(finder.getAlternatives(new TestTrackable("A", 5)))
                 .as("identity is by code, so same-code units are never their own alternative").isEmpty();
+    }
+
+    @Test
+    void exchangeRepeatsUntilNoSwapImprovesTheTotal() {
+        // Regression: the repair loops stored the *live* plan list in their history, so the fixed-point test was
+        // trivially true and every loop stopped after a single pass. Four plans of lengths 10/50/20/100 on vehicles
+        // of slowness 2/3/5/7 (assigned in that order) end the first pairwise pass at 580; the optimum - longest
+        // route on the fastest vehicle, 100x2 + 50x3 + 20x5 + 10x7 - is 520 and needs a second pass.
+        SpeedAwareAssignment assignment = new SpeedAwareAssignment(List.of(
+                new TestTrackable("v2", 2), new TestTrackable("v3", 3),
+                new TestTrackable("v5", 5), new TestTrackable("v7", 7)));
+        TestPlan p10 = planOfLength("p10", 10);
+        TestPlan p50 = planOfLength("p50", 50);
+        TestPlan p20 = planOfLength("p20", 20);
+        TestPlan p100 = planOfLength("p100", 100);
+        assignment.assignWithTrackable(p10, new TestTrackable("v2", 2));
+        assignment.assignWithTrackable(p50, new TestTrackable("v3", 3));
+        assignment.assignWithTrackable(p20, new TestTrackable("v5", 5));
+        assignment.assignWithTrackable(p100, new TestTrackable("v7", 7));
+        List<TestPlan> plans = new ArrayList<>(List.of(p10, p50, p20, p100));
+        assertThat(plans.stream().mapToLong(TestPlan::getCost).sum()).isEqualTo(20 + 150 + 100 + 700);
+
+        assignment.repairExchange(plans);
+
+        assertThat(plans.stream().mapToLong(TestPlan::getCost).sum()).isEqualTo(520);
+        assertThat(plans.stream().filter(p -> p.getCode().equals("p100")).findFirst().orElseThrow()
+                .getTrackable().getCode()).isEqualTo("v2");
+        assertThat(plans.stream().filter(p -> p.getCode().equals("p10")).findFirst().orElseThrow()
+                .getTrackable().getCode()).isEqualTo("v7");
+        PlanInvariants.assertTrackablesAreDistinct(plans);
+    }
+
+    @Test
+    void relocateRepeatsUntilEveryRescuablePlanIsAssigned() {
+        // Two stranded plans and two donors holding the only big units: relocation must hand both big units over
+        // and find the donors small ones, without booking any unit twice.
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("big1", 5), new TestTrackable("big2", 5),
+                new TestTrackable("small1", 1), new TestTrackable("small2", 1)));
+        TestPlan a = plan("a", 1);
+        TestPlan b = plan("b", 1);
+        TestPlan c = plan("c", 3);
+        TestPlan d = plan("d", 3);
+        a.setTrackable(unit(assignment.pool(), "big1#0"));
+        b.setTrackable(unit(assignment.pool(), "big2#0"));
+        List<TestPlan> plans = new ArrayList<>(List.of(a, b, c, d));
+
+        boolean rescued = assignment.repairRelocate(plans, assignment.pool());
+
+        assertThat(rescued).isTrue();
+        PlanInvariants.assertEveryPlanHasTrackable(plans);
+        PlanInvariants.assertTrackablesAreDistinct(plans);
+        PlanInvariants.assertCustomerCountWithinCapacity(plans);
+    }
+
+    @ParameterizedTest
+    @EnumSource(TestPlan.Equality.class)
+    void theRepairPassesRepeatWhateverThePlansEquality(TestPlan.Equality equality) {
+        // The passes ended when the plan list "contained" an earlier snapshot. Plans equal by code made every copy
+        // equal to the plan it replaced, so the exchange stopped after one pass at 580 instead of 520.
+        SpeedAwareAssignment assignment = new SpeedAwareAssignment(List.of(
+                new TestTrackable("v2", 2), new TestTrackable("v3", 3),
+                new TestTrackable("v5", 5), new TestTrackable("v7", 7)));
+        List<TestPlan> plans = new ArrayList<>();
+        int[] lengths = {10, 50, 20, 100};
+        String[] units = {"v2", "v3", "v5", "v7"};
+        int[] slowness = {2, 3, 5, 7};
+        for (int i = 0; i < lengths.length; i++) {
+            TestPlan plan = planOfLength("p" + lengths[i], lengths[i]);
+            plan.setEquality(equality);
+            assignment.assignWithTrackable(plan, new TestTrackable(units[i], slowness[i]));
+            plans.add(plan);
+        }
+
+        assignment.repairExchange(plans);
+
+        assertThat(plans.stream().mapToLong(TestPlan::getCost).sum()).as("%s", equality).isEqualTo(520);
+        PlanInvariants.assertTrackablesAreDistinct(plans);
+
+        TestAssignment relocating = new TestAssignment(List.of(
+                new TestTrackable("big1", 5), new TestTrackable("big2", 5),
+                new TestTrackable("small1", 1), new TestTrackable("small2", 1)));
+        List<TestPlan> stranded = new ArrayList<>(List.of(plan("a", 1), plan("b", 1), plan("c", 3), plan("d", 3)));
+        stranded.forEach(plan -> plan.setEquality(equality));
+        stranded.get(0).setTrackable(unit(relocating.pool(), "big1#0"));
+        stranded.get(1).setTrackable(unit(relocating.pool(), "big2#0"));
+
+        assertThat(relocating.repairRelocate(stranded, relocating.pool())).as("%s", equality).isTrue();
+        PlanInvariants.assertEveryPlanHasTrackable(stranded);
+        PlanInvariants.assertTrackablesAreDistinct(stranded);
+    }
+
+    @Test
+    void aReassignHookThatAcceptsTiesStillTerminates() {
+        // An accepted reassign restarts the scan inside the same pass, so the pass cap never triggered: a consumer rule
+        // "not worse" (<=) swapped one plan between two idle units forever.
+        TrackableAssignment<TestPlan, TestTrackable> notWorse = new TrackableAssignment<>(List.of(
+                new TestTrackable("T1", 10), new TestTrackable("T2", 20))) {
+            @Override
+            protected boolean assign(TestPlan plan, TestTrackable trackable) {
+                return CapacityRules.assign(plan, trackable);
+            }
+
+            @Override
+            protected boolean assign(TestPlan plan, List<TestTrackable> trackables) {
+                return CapacityRules.assign(plan, trackables);
+            }
+
+            @Override
+            protected Comparator<TestTrackable> comparator(TestPlan plan) {
+                return CapacityRules.comparator();
+            }
+
+            @Override
+            protected TrackableCategory getCategory(TestTrackable trackable) {
+                return CapacityRules.category(trackable);
+            }
+
+            @Override
+            protected boolean compareReassign(TestPlan plan, TestPlan newPlan) {
+                return newPlan.getCost() <= plan.getCost();
+            }
+        };
+        List<TestPlan> plans = new ArrayList<>(List.of(plan("p", 1)));
+        assertThat(notWorse.assign(plans)).isTrue();
+
+        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> notWorse.reassign(plans));
+
+        assertThat(plans.get(0).getTrackable()).isNotNull();
     }
 
     @Test

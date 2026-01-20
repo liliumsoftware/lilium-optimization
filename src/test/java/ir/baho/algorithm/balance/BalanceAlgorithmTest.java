@@ -226,6 +226,18 @@ class BalanceAlgorithmTest {
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, customers);
     }
 
+    @Test
+    void balancingAnEmptyPlanListReturnsAnEmptyList() {
+        // Regression: the zone splitter was handed plans.size() as its cap, which is 0 for an empty list and is now
+        // rejected; balancing must clamp it instead of failing.
+        MatrixCostCalculation calculation = calculation(customers(0));
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("T1", 5)));
+        TestInsertion insertion = new TestInsertion(calculation, new AlwaysFeasibleChecker(), false);
+
+        assertThat(new TestNodeBalance(calculation, assignment, insertion, 2).apply(new ArrayList<>())).isEmpty();
+        assertThat(new TestCapacityBalance(calculation, assignment, insertion, 2).apply(new ArrayList<>())).isEmpty();
+    }
+
     /**
      * Two small plans next to the depot ([A] and [B, C]) and one far plan of five: the fixture of the bouncing defect.
      */

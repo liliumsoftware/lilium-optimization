@@ -203,7 +203,8 @@ public abstract class AbstractInsertionAlgorithm<P
 
     /**
      * Probes every legal slot of {@code plan} — from just after its origin (or in front of its first customer when it
-     * has no origin) up to just before its last stop, never before an origin — copying the plan and node per slot,
+     * has no origin) up to just before its destination (or up to and including the end when it has none), never before
+     * an origin or after a destination — copying the plan and node per slot,
      * recosting the copy through {@code calculateCost(plan)}, and retaining the cheapest feasible one.
      * Always appends exactly one candidate for the customer — a real one when a feasible slot exists,
      * otherwise an empty (non-insertable) sentinel — so the regret matrix stays aligned.
@@ -212,9 +213,9 @@ public abstract class AbstractInsertionAlgorithm<P
         checkCancel();
         C bestCandidate = null;
         // Every slot between movable stops: after a leading origin (or in front of the first customer when the plan
-        // has none) up to before the last stop.
+        // has none) up to before a destination (or behind the last customer when it has none).
         int firstSlot = plan.getCount() > 0 && plan.getNodes().get(0).getType() == Nodeable.Type.ORIGIN ? 1 : 0;
-        int lastSlot = plan.getCount() - 1;
+        int lastSlot = plan.getDestination() == null ? plan.getCount() : plan.getCount() - 1;
         // The zone gate does not depend on the slot, so it is asked once per plan rather than once per position.
         boolean supported = supports(plan, customer);
         for (int i = firstSlot; supported && i <= lastSlot; i++) {
