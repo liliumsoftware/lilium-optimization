@@ -49,8 +49,16 @@ public abstract class AbstractRelocateAlgorithm<P
             return false;
         }
         if (type == ExchangeRelocateType.INSERTION) {
+            // The insertion algorithm chooses the target position itself, so only the donor's segment start
+            // varies. Each direction is scanned over *its own* donor's positions: a single reversed call per
+            // first-plan index would only ever try the second plan's segment at index 1.
             for (int i = 0; i < firstPlan.getCount(); i++) {
-                if (this.apply(otherPlans, plans, firstPlan, secondPlan, i, 1)) {
+                if (super.apply(otherPlans, plans, firstPlan, secondPlan, i, 1)) {
+                    return true;
+                }
+            }
+            for (int j = 0; j < secondPlan.getCount(); j++) {
+                if (super.apply(otherPlans, plans, secondPlan, firstPlan, j, 1)) {
                     return true;
                 }
             }
@@ -67,6 +75,10 @@ public abstract class AbstractRelocateAlgorithm<P
         return false;
     }
 
+    /**
+     * Tries the move in both directions for the SIMPLE/TWO_OPT types: first plan donates its segment at {@code i}
+     * into the second plan at {@code j}, then the second plan donates at {@code j} into the first at {@code i}.
+     */
     @Override
     protected boolean apply(List<P> otherPlans, List<P> plans, P firstPlan, P secondPlan, int i, int j) {
         boolean result = super.apply(otherPlans, plans, firstPlan, secondPlan, i, j);

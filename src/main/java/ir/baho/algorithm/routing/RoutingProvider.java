@@ -14,22 +14,26 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Thin HTTP client for an OSRM routing server. Exposes the route geometry ({@code /route/v1}), the all-pairs
  * duration matrix ({@code /table/v1}), and single-trip duration/distance. OSRM returns durations in seconds;
  * this client converts them to integer <strong>milliseconds</strong> (×1000, rounded to the nearest millisecond) to
- * match the library's integral cost model, and formats coordinates as {@code lon,lat} via a shared
+ * match the library's integral cost model, and formats coordinates as {@code lon,lat} via a per-thread
  * {@link DecimalFormat}.
  *
  * <p>Any non-200 response, unparseable body, or body without the expected {@code routes}/{@code durations}
  * content (the <a href="https://project-osrm.org/docs/v5.24.0/api/">OSRM HTTP API</a> shape) surfaces as
  * {@link RoutingException}; so does a {@code null} duration or distance and a {@code null} cell of the duration table
  * (OSRM's answer for a pair it cannot route between), whose message names the pair. Failures are reported through the
- * exception only, they are not logged as errors. All calls use the {@code driving} profile. Note a fresh
- * {@link HttpClient} is created per call, so this is convenient rather than high-throughput.
+ * exception only, they are not logged as errors. All calls use the {@code driving} profile. Coordinates are always
+ * formatted with a {@code '.'} decimal separator regardless of the default locale, and the formatter is per-thread,
+ * so instances may be shared across threads. Note a fresh {@link HttpClient} is created per call, so this is
+ * convenient rather than high-throughput.
  *
  * <p><strong>Input validation.</strong> Every coordinate is checked before a request is built: a {@link Point} without
  * coordinates, a non-finite longitude or latitude, a longitude outside {@code [-180, 180]} or a latitude outside
@@ -41,21 +45,20 @@ import java.util.List;
 public class RoutingProvider {
 
     /**
-     * Coordinate formatter: up to 15 fraction digits. The three integer digits suffice because coordinates are
-     * validated to {@code [-180, 180]} first.
+     * Coordinate formatter: up to 15 fraction digits, always a {@code '.'} decimal separator and no grouping,
+     * whatever the JVM's default locale is. {@link DecimalFormat} is not thread-safe, so one instance per thread. The
+     * three integer digits suffice because coordinates are validated to {@code [-180, 180]} first.
      */
-    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat();
-
-    static {
-        DECIMAL_FORMAT.setMaximumIntegerDigits(3);
-        DECIMAL_FORMAT.setMaximumFractionDigits(15);
-    }
-
+    private static final ThreadLocal<DecimalFormat> DECIMAL_FORMAT = ThreadLocal.withInitial(() -> {
+        DecimalFormat format = new DecimalFormat("0.###############", DecimalFormatSymbols.getInstance(Locale.ROOT));
+        format.setMaximumIntegerDigits(3);
+        return format;
+    });
     private final String routingServiceUrl;
     private final JsonMapper mapper;
 
     private static String format(double coordinate) {
-        return DECIMAL_FORMAT.format(coordinate);
+        return DECIMAL_FORMAT.get().format(coordinate);
     }
 
     /**

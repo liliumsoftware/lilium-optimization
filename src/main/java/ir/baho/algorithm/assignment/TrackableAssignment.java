@@ -21,8 +21,10 @@ import java.util.stream.IntStream;
  * interchangeable units becomes N assignable units. The various {@code assign} overloads cover assigning a
  * whole set, one plan against a fixed set, or against an explicit sub-pool; the richest one runs
  * relocate → exchange → reassign repair passes to fill unassigned plans and swap resources toward lower cost. The
- * list-based overloads offer each plan the pool sorted by {@link #comparator(Planable)}. The repair passes end once
- * the plan list stops changing.
+ * list-based overloads offer each plan the pool sorted by {@link #comparator(Planable)}. The repair passes end once a
+ * pass accepts no move and never consult the plans' {@code equals}, so plans compared by value, by code or by identity
+ * are repaired alike; every accepted move also counts against a cap, so an overridden {@code compare…} hook that
+ * accepts ties cannot loop forever.
  *
  * <p><strong>Concurrency.</strong> {@link #assign(List, List)} is {@code synchronized} because callers may hand it
  * overlapping plan sets. The library's zone-group entry points (see {@code ZoneGroups}) first run the groups in
@@ -34,6 +36,12 @@ import java.util.stream.IntStream;
  */
 @Slf4j
 public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends Trackable<T>> {
+
+    /**
+     * Upper bound on the moves one repair loop accepts; only reached when an overridden {@code compare…} hook keeps
+     * accepting moves that never converge (for example by accepting ties).
+     */
+    private static final int MAX_MOVES = 100_000;
 
     @Getter
     protected final List<T> trackables;
@@ -325,16 +333,21 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
 
     /**
      * Repair pass that hands an assigned resource over to an unassigned plan and finds the donor a new one,
-     * repeating until the plan list stops changing.
+     * repeating until a full pass accepts no move. Termination never consults the plans' {@code equals}: every accepted
+     * move strictly increases the number of assigned plans, and every accepted move counts against a cap (100 000,
+     * logged once at WARN) in case an overridden {@link #compareRelocate} accepts moves that do not converge.
      *
      * @return {@code true} if every plan ended up with a resource
      */
     protected boolean relocate(List<P> plans, List<T> trackables) {
-        List<List<P>> historyPlans = new ArrayList<>();
+        int moves = 0;
         while (true) {
-            historyPlans.add(plans);
+            boolean moved = false;
             for (int i = 0; i < plans.size(); i++) {
                 for (int j = i + 1; j < plans.size(); j++) {
+                    if (isMoveLimitReached(moves, "relocate")) {
+                        return plans.stream().allMatch(p -> p.getTrackable() != null);
+                    }
                     P firstPlan = plans.get(i);
                     P secondPlan = plans.get(j);
                     List<P> tempPlans = plans.stream().map(P::copy).collect(Collectors.toList());
@@ -350,6 +363,8 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                             && compareRelocate(tempPlans, plans)) {
                         plans.clear();
                         plans.addAll(tempPlans);
+                        moved = true;
+                        moves++;
                         log.trace(getMessage(firstPlan, secondPlan));
                     } else if (tempFirstPlan.getTrackable() != null
                             && tempSecondPlan.getTrackable() == null
@@ -360,26 +375,45 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                             && compareRelocate(tempPlans, plans)) {
                         plans.clear();
                         plans.addAll(tempPlans);
+                        moved = true;
+                        moves++;
                         log.trace(getMessage(firstPlan, secondPlan));
                     }
                 }
             }
-            if (historyPlans.contains(plans)) {
+            if (!moved) {
                 return plans.stream().allMatch(p -> p.getTrackable() != null);
             }
         }
     }
 
     /**
+     * Whether a repair loop has accepted {@link #MAX_MOVES} moves; logs a WARN when it has.
+     */
+    private boolean isMoveLimitReached(int moves, String repair) {
+        if (moves < MAX_MOVES) {
+            return false;
+        }
+        log.warn("Trackable {} stopped after {} accepted moves without converging; check the compare hooks", repair,
+                MAX_MOVES);
+        return true;
+    }
+
+    /**
      * Repair pass that swaps the resources of two plans in different categories whenever the summed cost drops,
-     * repeating until the plan list stops changing.
+     * repeating until a pass accepts no swap. Terminates because every accepted swap strictly lowers the total cost;
+     * accepted swaps count against the same cap as {@link #relocate}, and the plans' {@code equals} is never consulted.
      */
     protected void exchange(List<P> plans) {
-        List<List<P>> historyPlans = new ArrayList<>();
+        boolean moved;
+        int moves = 0;
         do {
-            historyPlans.add(plans);
+            moved = false;
             for (int i = 0; i < plans.size(); i++) {
                 for (int j = i + 1; j < plans.size(); j++) {
+                    if (isMoveLimitReached(moves, "exchange")) {
+                        return;
+                    }
                     P firstPlan = plans.get(i);
                     P secondPlan = plans.get(j);
                     List<P> tempPlans = plans.stream().map(P::copy).toList();
@@ -400,11 +434,13 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                             && compareExchange(tempFirstPlan, tempSecondPlan, tempPlans, plans)) {
                         plans.clear();
                         plans.addAll(tempPlans);
+                        moved = true;
+                        moves++;
                         log.trace(getMessage(firstPlan, secondPlan));
                     }
                 }
             }
-        } while (!historyPlans.contains(plans));
+        } while (moved);
     }
 
     /**
@@ -416,16 +452,22 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
 
     /**
      * Repair pass that moves a plan onto an idle resource of another category when that is cheaper, restarting
-     * the scan after each move and repeating until the plan list stops changing. A resource is idle when it is in
+     * the scan after each move and repeating until nothing changes. A resource is idle when it is in
      * {@code trackables} and no plan in {@code plans} holds it; plans without a resource are left alone. Every
      * candidate is probed on a fresh copy of the plan, so a refused or rejected probe never leaks into the next
-     * one.
+     * one. Terminates because every accepted move strictly lowers the plan's cost; a pass without an accepted move
+     * ends the repair. An accepted move restarts the scan within the pass, so the cap shared with {@link #relocate}
+     * counts every accepted move: an overridden {@link #compareReassign} that accepts ties cannot loop forever.
      */
     protected void reassign(List<P> plans, List<T> trackables) {
-        List<List<P>> historyPlans = new ArrayList<>();
+        boolean moved;
+        int moves = 0;
         do {
-            historyPlans.add(plans);
+            moved = false;
             for (int i = 0; i < plans.size(); i++) {
+                if (isMoveLimitReached(moves, "reassign")) {
+                    return;
+                }
                 P plan = plans.get(i);
                 if (plan.getTrackable() == null) {
                     continue;
@@ -440,13 +482,15 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
                     P newPlan = plan.copy();
                     if (assign(newPlan, trackable) && compareReassign(plan, newPlan)) {
                         plans.set(i, newPlan);
+                        moved = true;
+                        moves++;
                         log.trace(getMessage(plan, newPlan));
                         i = -1;
                         break;
                     }
                 }
             }
-        } while (!historyPlans.contains(plans));
+        } while (moved);
     }
 
     /**

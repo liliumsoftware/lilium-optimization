@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Insertion is the repair half of most of the library: destroy-repair, the INSERTION exchange/relocate
@@ -307,6 +309,22 @@ class InsertionAlgorithmTest {
         }
     }
 
+    @Test
+    void regretTerminatesWhenACustomersCopyIsNotEqualToIt() {
+        // The candidate carries a copy of the customer; the round used to remove that copy from the batch by equals,
+        // which never matches for a consumer without value equality, so the same customer was inserted forever.
+        TestNode identityB = b.withIdentityEquality();
+        MatrixCostCalculation calculation = calculation(List.of(origin, a, identityB));
+        List<TestPlan> plans = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a))));
+        TestInsertion insertion = new TestInsertion(calculation, new AlwaysFeasibleChecker(), true);
+
+        List<TestNode> inserted = assertTimeoutPreemptively(Duration.ofSeconds(5),
+                () -> insertion.insert(plans, List.of(identityB)));
+
+        assertThat(inserted).hasSize(1);
+        assertThat(plans.get(0).getCustomers()).extracting(TestNode::getCode).containsExactly("A", "B");
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void bothPoliciesRankACustomersCandidatesWithTheConsumersComparator(boolean regret) {
@@ -379,6 +397,75 @@ class InsertionAlgorithmTest {
         assertThat(insertion.insert(plans, middle)).isTrue();
 
         assertThat(gateCalls).hasValue(1);
+    }
+
+    @Test
+    void everyProbedCandidateIsRecostedBeforeItsDeltaIsTaken() {
+        // A consumer may cache the cost on the plan and refresh it in calculateCost(plan); the candidate's delta
+        // reads getCost(), so the probe must recost the candidate copy first.
+        AtomicInteger recosted = new AtomicInteger();
+        MatrixCostCalculation calculation = new MatrixCostCalculation() {
+            @Override
+            public long calculateCost(TestPlan plan) {
+                recosted.incrementAndGet();
+                return super.calculateCost(plan);
+            }
+        };
+        calculation.initializeCostMatrix(List.of(origin, a, b, middle));
+        List<TestPlan> plans = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a, b))));
+
+        assertThat(new TestInsertion(calculation, new AlwaysFeasibleChecker(), false).insert(plans, middle)).isTrue();
+
+        assertThat(recosted).as("one recost per probed slot of the open plan [O, A, B]").hasValue(3);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void everySlotBetweenMovableStopsIsProbedForEveryPlanShape(boolean regret) {
+        // Slots used to start at index 1, assuming an origin there: a plan without an origin ([R1, D]) never had the
+        // slot before its first customer probed, so R3 went behind R1 (cost 40) instead of in front of it (30).
+        TestNode destination = TestNode.destination("D", 0, 0);
+        TestNode r1 = TestNode.customer("R1", 0, 20, 1);
+        TestNode r3 = TestNode.customer("R3", 0, 30, 1);
+        TestNode a = TestNode.customer("A", 0, 10, 1);
+        TestNode m = TestNode.customer("M", 0, 5, 1);
+        MatrixCostCalculation calculation = calculation(List.of(origin, destination, r1, r3, a, m));
+        TestInsertion insertion = new TestInsertion(calculation, new AlwaysFeasibleChecker(), regret);
+
+        List<TestPlan> withoutOrigin = new ArrayList<>(List.of(new TestPlan("p", List.of(r1, destination))));
+        insertion.insert(withoutOrigin, List.of(r3));
+        assertThat(withoutOrigin.get(0).getNodes()).as("destination only").containsExactly(r3, r1, destination);
+
+        List<TestPlan> closed = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a, destination))));
+        insertion.insert(closed, List.of(m));
+        assertThat(closed.get(0).getNodes()).as("origin and destination: M goes between the depots")
+                .hasSize(4).startsWith(origin).endsWith(destination).contains(m, a);
+
+        TestNode b = TestNode.customer("B", 0, 20, 1);
+        MatrixCostCalculation openCalculation = calculation(List.of(origin, a, b));
+        List<TestPlan> open = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a))));
+        new TestInsertion(openCalculation, new AlwaysFeasibleChecker(), regret).insert(open, List.of(b));
+        assertThat(open.get(0).getNodes()).as("origin only").containsExactly(origin, a, b);
+    }
+
+    @Test
+    void anOpenPlanCanReceiveTheNewCustomerAfterItsLastStop() {
+        // Regression: only slots 1..getCount()-1 were probed, which is complete for a closed plan (before the
+        // destination) but never tried appending to an open plan, so [O, A] + B could only become [O, B, A].
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 0, 10, 1);
+        TestNode b = TestNode.customer("B", 0, 20, 1);
+        MatrixCostCalculation calculation = new MatrixCostCalculation();
+        calculation.initializeCostMatrix(List.of(origin, a, b));
+        TestPlan plan = new TestPlan("p", List.of(origin, a));
+        calculation.calculateCost(plan);
+        List<TestPlan> plans = new ArrayList<>(List.of(plan));
+
+        boolean inserted = new TestInsertion(calculation, new AlwaysFeasibleChecker(), false).insert(plans, b);
+
+        assertThat(inserted).isTrue();
+        assertThat(plans.get(0).getNodes()).containsExactly(origin, a, b);
+        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(20);
     }
 
 }

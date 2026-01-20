@@ -73,7 +73,8 @@ public abstract class AbstractBalanceAlgorithm<P
      * new list) in the order of each group's first input plan.
      */
     public List<P> apply(List<P> plans) {
-        return ZoneGroups.apply(costCalculation, trackableAssignment, plans.size(), plans, this::doOperation);
+        return ZoneGroups.apply(costCalculation, trackableAssignment, Math.max(1, plans.size()), plans,
+                this::doOperation);
     }
 
     /**

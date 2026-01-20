@@ -25,15 +25,17 @@ public interface FeasibilityChecker<P extends Planable<P, ?, ?>> {
     String getMessage(String key, Object... params);
 
     /**
-     * One {@link ObjectError} per infeasible plan, bound to the assigned resource's code.
+     * One {@link ObjectError} per infeasible plan, bound to the assigned resource's code, or to the plan's own
+     * code when the plan has no resource yet.
      */
     default List<ObjectError> getErrors(List<P> plans) {
         List<ObjectError> errors = new ArrayList<>();
         for (P plan : plans) {
             FeasibilityResult result = getResult(plan);
             if (!result.isFeasible()) {
-                errors.add(new ObjectError(getMessage(result.getCause(), result.getParams()),
-                        plan.getTrackable().getCode()));
+                // An unassigned plan is legitimate before assignment; bind the error to the plan itself then.
+                String objectName = plan.getTrackable() != null ? plan.getTrackable().getCode() : plan.getCode();
+                errors.add(new ObjectError(getMessage(result.getCause(), result.getParams()), objectName));
             }
         }
         return errors;
