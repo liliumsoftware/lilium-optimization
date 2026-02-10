@@ -99,7 +99,7 @@ class TwoOptTest {
                     .isGreaterThanOrEqualTo(optimal(calc, origin, customers));
             assertThat(result.getNodes()).as("valid permutation (seed %d)", seed)
                     .containsExactlyInAnyOrderElementsOf(initial);
-            assertThat(result.getNodes().get(0)).isEqualTo(origin);   // endpoint preserved
+            assertThat(result.getNodes().getFirst()).isEqualTo(origin);   // endpoint preserved
 
             // Local optimum: a second pass cannot improve further.
             TestPlan again = twoOpt.apply(result.copy());

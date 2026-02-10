@@ -56,7 +56,7 @@ class ClarkeWrightAlgorithmTest {
                 new RecostingLocalSearch(calculation), destination, OptimizationType.NO_RESTRICTION)
                 .plan(origin, customers);
         assertThat(plans).hasSize(1);
-        return plans.get(0).getNodes().stream().map(n -> n.getX() + "," + n.getY()).toList();
+        return plans.getFirst().getNodes().stream().map(n -> n.getX() + "," + n.getY()).toList();
     }
 
     private static TestClarkeWright seedJudge(MatrixCostCalculation calculation, boolean firstReturns,
@@ -84,11 +84,11 @@ class ClarkeWrightAlgorithmTest {
         // The unique optimum: O -> A -> B -> C -> D, i.e. 10 + 10 + 10 + 30 = 60. Any other permutation of the
         // three customers costs strictly more (e.g. O-B-A-C-D = 20 + 10 + 20 + 30 = 80).
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getNodes()).containsExactly(
+        assertThat(plans.getFirst().getNodes()).containsExactly(
                 closed.origin(), closed.customer("A"), closed.customer("B"), closed.customer("C"),
                 closed.destination());
-        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(60);
-        assertThat(plans.get(0).getCost()).isEqualTo(60);
+        assertThat(PlanInvariants.referenceCost(plans.getFirst())).isEqualTo(60);
+        assertThat(plans.getFirst().getCost()).isEqualTo(60);
         PlanInvariants.assertValidSolution(plans, closed.origin(), closed.destination(), closed.customers());
     }
 
@@ -121,7 +121,7 @@ class ClarkeWrightAlgorithmTest {
         List<TestPlan> plans = cw.plan(closed.origin(), closed.customers());
 
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getCustomers())
+        assertThat(plans.getFirst().getCustomers())
                 .as("s(B,C) = 40 beats every saving involving A (20)")
                 .containsExactly(closed.customer("B"), closed.customer("C"));
     }
@@ -135,8 +135,8 @@ class ClarkeWrightAlgorithmTest {
         List<TestPlan> plans = cw.plan(problem.origin(), problem.customers());
 
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getCustomers()).containsExactly(problem.customer("A"));
-        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(10);
+        assertThat(plans.getFirst().getCustomers()).containsExactly(problem.customer("A"));
+        assertThat(PlanInvariants.referenceCost(plans.getFirst())).isEqualTo(10);
     }
 
     @Test
@@ -149,9 +149,9 @@ class ClarkeWrightAlgorithmTest {
 
         // O-A-B costs 10 + 20 = 30; O-B-A costs 30 + 20 = 50. Only the cheap orientation may survive.
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getCustomers())
+        assertThat(plans.getFirst().getCustomers())
                 .containsExactly(problem.customer("A"), problem.customer("B"));
-        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(30);
+        assertThat(PlanInvariants.referenceCost(plans.getFirst())).isEqualTo(30);
         // The same geometry with the codes swapped must give the same route: the orientation used to be decided by
         // the code tie-break between two equal savings, which only happened to favour the near customer here.
         assertThat(route(null, List.of(TestNode.customer("A", 0, 30, 1), TestNode.customer("B", 0, 10, 1)),
@@ -217,7 +217,7 @@ class ClarkeWrightAlgorithmTest {
             List<TestPlan> plans = cw.plan(o, List.of(near, far));
 
             assertThat(plans).as("near customer %s", nearCode).hasSize(1);
-            assertThat(plans.get(0).getNodes()).as("near customer %s", nearCode).containsExactly(o, near, far);
+            assertThat(plans.getFirst().getNodes()).as("near customer %s", nearCode).containsExactly(o, near, far);
         }
     }
 
@@ -243,10 +243,10 @@ class ClarkeWrightAlgorithmTest {
         List<TestPlan> plans = cw.plan(open.origin(), open.customers());
 
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getNodes()).doesNotContainNull();
-        assertThat(plans.get(0).getNodes()).containsExactly(
+        assertThat(plans.getFirst().getNodes()).doesNotContainNull();
+        assertThat(plans.getFirst().getNodes()).containsExactly(
                 open.origin(), open.customer("A"), open.customer("B"), open.customer("C"));
-        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(30);
+        assertThat(PlanInvariants.referenceCost(plans.getFirst())).isEqualTo(30);
         PlanInvariants.assertNodeLayout(plans);
         // Reversing the codes along the line must not change the route (it used to give O-C-B-A... orders whenever
         // the codes ran against the geometry, since the savings of both orientations were equal).
@@ -294,7 +294,7 @@ class ClarkeWrightAlgorithmTest {
                 List<TestPlan> plans = cw.plan(closed.origin(), customers);
 
                 assertThat(plans).as("%s", type).hasSize(1);
-                assertThat(plans.get(0).getNodes()).as("%s", type)
+                assertThat(plans.getFirst().getNodes()).as("%s", type)
                         .containsExactly(customers.get(1), customers.get(0), destination);
             }
         }
@@ -470,7 +470,7 @@ class ClarkeWrightAlgorithmTest {
             assertThat(PlanInvariants.referenceTotalCost(plans))
                     .as("%s: zero-length inter-customer edges cannot add cost", problem.name())
                     .isEqualTo(problem.customers().isEmpty() ? 0
-                            : PlanInvariants.edgeCost(problem.origin(), problem.customers().get(0)));
+                            : PlanInvariants.edgeCost(problem.origin(), problem.customers().getFirst()));
         }
     }
 

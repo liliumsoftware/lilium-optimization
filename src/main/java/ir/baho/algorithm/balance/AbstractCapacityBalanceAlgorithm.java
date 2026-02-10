@@ -90,7 +90,7 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
             }
             List<P> receiver = List.of(minPlan.copy());
             List<List<P>> candidates = new ArrayList<>();
-            for (Map.Entry<N, P> nodePlan : getOtherPlanNodes(donors, receiver.get(0)).entrySet()) {
+            for (Map.Entry<N, P> nodePlan : getOtherPlanNodes(donors, receiver.getFirst()).entrySet()) {
                 checkCancel();
                 C bestInsertionCandidate = insertionAlgorithm.getBestInsertionCandidate(receiver, nodePlan.getKey());
                 int donor = indexOfInstance(donors, nodePlan.getValue());

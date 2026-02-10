@@ -67,7 +67,7 @@ class UnMergeAlgorithmTest {
 
         List<TestSingleUnMerge> unMerge = List.of(new TestSingleUnMerge(fleet(),
                 new RecostingLocalSearch(calculation)));
-        List<TestPlan> result = unMerge.get(0).apply(plans);
+        List<TestPlan> result = unMerge.getFirst().apply(plans);
 
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result,
                 List.of(zone1First, zone1Second, zone2First));
@@ -87,7 +87,7 @@ class UnMergeAlgorithmTest {
         List<TestPlan> result = new TestSingleUnMerge(fleet(), new RecostingLocalSearch(calculation)).apply(plans);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCustomers()).containsExactlyInAnyOrder(zone1First, zone1Second);
+        assertThat(result.getFirst().getCustomers()).containsExactlyInAnyOrder(zone1First, zone1Second);
         PlanInvariants.assertNoEmptyPlans(result);
     }
 
@@ -105,8 +105,7 @@ class UnMergeAlgorithmTest {
         List<TestPlan> result = new TestSingleUnMerge(fleet(), new RecostingLocalSearch(calculation)).apply(plans);
 
         PlanInvariants.assertNodeLayout(result);
-        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes()
-                .get(plan.getNodes().size() - 1)).isEqualTo(destination));
+        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes().getLast()).isEqualTo(destination));
     }
 
     @Test
@@ -183,8 +182,7 @@ class UnMergeAlgorithmTest {
         List<TestPlan> result = new TestDoubleUnMerge(fleet(), new RecostingLocalSearch(calculation)).apply(plans);
 
         PlanInvariants.assertNodeLayout(result);
-        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes()
-                .get(plan.getNodes().size() - 1)).isEqualTo(destination));
+        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes().getLast()).isEqualTo(destination));
     }
 
     @Test
@@ -205,9 +203,9 @@ class UnMergeAlgorithmTest {
             List<TestPlan> snapshot = PlanInvariants.deepCopy(plans);
 
             assertThat(new TestSingleUnMerge(assignment, new RecostingLocalSearch(calculation)).apply(plans))
-                    .as("zone %s", pair.get(0).getZone()).isEqualTo(snapshot);
+                    .as("zone %s", pair.getFirst().getZone()).isEqualTo(snapshot);
             assertThat(new TestDoubleUnMerge(assignment, new RecostingLocalSearch(calculation)).apply(plans))
-                    .as("zone %s", pair.get(0).getZone()).isEqualTo(snapshot);
+                    .as("zone %s", pair.getFirst().getZone()).isEqualTo(snapshot);
         }
     }
 

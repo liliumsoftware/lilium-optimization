@@ -146,7 +146,7 @@ class ExchangeRelocateTest {
         List<TestPlan> result = exchange.apply(plans);
 
         PlanInvariants.assertNodeLayout(result);
-        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes().get(0)).isEqualTo(origin));
+        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes().getFirst()).isEqualTo(origin));
     }
 
     @Test

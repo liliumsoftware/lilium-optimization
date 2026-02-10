@@ -138,11 +138,11 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
                 if (customers.isEmpty()) {
                     continue;
                 }
-                if (customers.get(0).getCode().equals(saving.destination().getCode())) {
+                if (customers.getFirst().getCode().equals(saving.destination().getCode())) {
                     secondPlan = plan;
                     continue;
                 }
-                if (customers.get(customers.size() - 1).getCode().equals(saving.origin().getCode())) {
+                if (customers.getLast().getCode().equals(saving.origin().getCode())) {
                     firstPlan = plan;
                 }
             }

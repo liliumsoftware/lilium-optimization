@@ -265,7 +265,7 @@ class DestroyRepairTest {
 
                 routes.add(result.stream().map(plan -> plan.getCode() + plan.getNodes()).toList());
             }
-            assertThat(routes).as("seed %d", seed).allSatisfy(route -> assertThat(route).isEqualTo(routes.get(0)));
+            assertThat(routes).as("seed %d", seed).allSatisfy(route -> assertThat(route).isEqualTo(routes.getFirst()));
         }
     }
 
@@ -333,8 +333,7 @@ class DestroyRepairTest {
         // 2010 before; one route F2-F1-N1-D (1010) is the best layout.
         assertThat(PlanInvariants.referenceTotalCost(result)).isLessThan(before).isLessThanOrEqualTo(1010);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, far1, far2));
-        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes()
-                .get(plan.getNodes().size() - 1)).isEqualTo(destination));
+        assertThat(result).allSatisfy(plan -> assertThat(plan.getNodes().getLast()).isEqualTo(destination));
     }
 
     @Test
@@ -401,7 +400,7 @@ class DestroyRepairTest {
         assertThat(ranked).isNotEmpty();
         assertThat(ranked).as("ranked worst-placed first")
                 .isSortedAccordingTo((left, right) -> Integer.compare(right.getValue(), left.getValue()));
-        assertThat(ranked.get(0).getValue()).as("the stop wedged between two far-away neighbours ranks top")
+        assertThat(ranked.getFirst().getValue()).as("the stop wedged between two far-away neighbours ranks top")
                 .isGreaterThan(0);
 
         List<Map.Entry<TestNode, Integer>> filtered = destroyRepair(calculation, 2, 3)

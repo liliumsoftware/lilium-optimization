@@ -80,7 +80,7 @@ class BaseAlgorithmRunnerTest {
         runner.plan(origin, List.of(customerA, customerB));
 
         assertThat(runner.getPlans()).hasSize(1);
-        assertThat(runner.getPlans().get(0).getCost()).isEqualTo(20);
+        assertThat(runner.getPlans().getFirst().getCost()).isEqualTo(20);
         assertThat(applied).containsExactly("first:2", "second:2");
     }
 
@@ -90,7 +90,7 @@ class BaseAlgorithmRunnerTest {
 
         runner.plan(origin, List.of(customerA));
 
-        assertThat(runner.getPlans().get(0).getCode()).hasSize(25).containsOnlyDigits();
+        assertThat(runner.getPlans().getFirst().getCode()).hasSize(25).containsOnlyDigits();
     }
 
     @Test

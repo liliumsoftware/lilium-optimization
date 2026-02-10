@@ -39,9 +39,9 @@ public abstract class AbstractBigNodeSplitAlgorithm<P
         for (int i = 0; i < nodes.size(); i++) {
             N node = nodes.get(i);
             if (!sortedTrackables.isEmpty() && trackables.stream().noneMatch(t -> matchBiggestTrackable(t, node))) {
-                T trackable = sortedTrackables.get(0);
+                T trackable = sortedTrackables.getFirst();
                 if (supports(trackable, node)) {
-                    sortedTrackables.remove(0);
+                    sortedTrackables.removeFirst();
                     N newNode = node.copy();
                     N remainingNode = createRemainingNode(node, trackable, newNode);
                     requireOwnCode(newNode, remainingNode);
@@ -51,7 +51,7 @@ public abstract class AbstractBigNodeSplitAlgorithm<P
                     P singleNodePlan = getNewPlan(newNode, trackable);
                     if (singleNodePlan != null) {
                         singleNodePlans.add(singleNodePlan);
-                        log.debug("Split {}", singleNodePlan.getCustomers().get(0));
+                        log.debug("Split {}", singleNodePlan.getCustomers().getFirst());
                     } else {
                         log.trace("Can not create plan");
                     }

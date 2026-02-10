@@ -158,7 +158,7 @@ public abstract class AbstractInsertionAlgorithm<P
             if (insertionCandidates.isEmpty()) {
                 throw new IllegalStateException("No insertion candidate for node " + customer.getCode());
             }
-            regretSums.put(insertionCandidates.get(0), insertionCosts.values().stream().mapToLong(Long::longValue)
+            regretSums.put(insertionCandidates.getFirst(), insertionCosts.values().stream().mapToLong(Long::longValue)
                     .sum());
         }
 
@@ -173,7 +173,7 @@ public abstract class AbstractInsertionAlgorithm<P
                             o2.getNewNode()))
                     .limit(1).findFirst().orElseThrow(IllegalStateException::new);
         }
-        return bestInsertionCandidates.get(0);
+        return bestInsertionCandidates.getFirst();
     }
 
     /**
@@ -183,7 +183,7 @@ public abstract class AbstractInsertionAlgorithm<P
     public C getBestInsertionCandidate(List<P> plans, N customer, int... index) {
         List<C> planCandidates = getInsertionCandidates(plans, customer, index)
                 .stream().filter(c -> c.getCandidatePlan() != null).toList();
-        return planCandidates.isEmpty() ? null : planCandidates.get(0);
+        return planCandidates.isEmpty() ? null : planCandidates.getFirst();
     }
 
     private List<C> getInsertionCandidates(List<P> plans, N customer, int... index) {
@@ -214,7 +214,7 @@ public abstract class AbstractInsertionAlgorithm<P
         C bestCandidate = null;
         // Every slot between movable stops: after a leading origin (or in front of the first customer when the plan
         // has none) up to before a destination (or behind the last customer when it has none).
-        int firstSlot = plan.getCount() > 0 && plan.getNodes().get(0).getType() == Nodeable.Type.ORIGIN ? 1 : 0;
+        int firstSlot = plan.getCount() > 0 && plan.getNodes().getFirst().getType() == Nodeable.Type.ORIGIN ? 1 : 0;
         int lastSlot = plan.getDestination() == null ? plan.getCount() : plan.getCount() - 1;
         // The zone gate does not depend on the slot, so it is asked once per plan rather than once per position.
         boolean supported = supports(plan, customer);

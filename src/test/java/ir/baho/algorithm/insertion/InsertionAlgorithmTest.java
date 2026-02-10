@@ -77,7 +77,7 @@ class InsertionAlgorithmTest {
         // win if it were allowed; it is structurally off-limits, which keeps the ORIGIN-first layout intact.
         TestPlan candidate = insertion.getBestInsertionCandidate(List.of(plan), behind).getCandidatePlan();
 
-        assertThat(candidate.getNodes().get(0)).isEqualTo(origin);
+        assertThat(candidate.getNodes().getFirst()).isEqualTo(origin);
         PlanInvariants.assertNodeLayout(List.of(candidate));
     }
 
@@ -152,7 +152,7 @@ class InsertionAlgorithmTest {
 
         assertThat(insertion.getBestInsertionCandidate(plans, b)).isNull();
         assertThat(insertion.insert(plans, b)).isFalse();
-        assertThat(plans.get(0).getCustomers()).containsExactly(a);
+        assertThat(plans.getFirst().getCustomers()).containsExactly(a);
     }
 
     @Test
@@ -217,7 +217,7 @@ class InsertionAlgorithmTest {
         List<TestNode> inserted = insertion.insert(plans, List.of(b, middle));
 
         assertThat(inserted).as("regret=%s", regret).hasSize(1);
-        assertThat(plans.get(0).getCustomerCount()).isEqualTo(2);
+        assertThat(plans.getFirst().getCustomerCount()).isEqualTo(2);
         PlanInvariants.assertNoDuplicateCustomers(plans);
     }
 
@@ -305,7 +305,7 @@ class InsertionAlgorithmTest {
             List<TestNode> inserted = new TestInsertion(calculation, onlyP1, regret).insert(plans, List.of(distant));
 
             assertThat(inserted).as("regret=%s", regret).containsExactly(distant);
-            assertThat(plans.get(0).getCustomers()).as("regret=%s", regret).containsExactly(distant);
+            assertThat(plans.getFirst().getCustomers()).as("regret=%s", regret).containsExactly(distant);
         }
     }
 
@@ -322,7 +322,7 @@ class InsertionAlgorithmTest {
                 () -> insertion.insert(plans, List.of(identityB)));
 
         assertThat(inserted).hasSize(1);
-        assertThat(plans.get(0).getCustomers()).extracting(TestNode::getCode).containsExactly("A", "B");
+        assertThat(plans.getFirst().getCustomers()).extracting(TestNode::getCode).containsExactly("A", "B");
     }
 
     @ParameterizedTest
@@ -434,18 +434,18 @@ class InsertionAlgorithmTest {
 
         List<TestPlan> withoutOrigin = new ArrayList<>(List.of(new TestPlan("p", List.of(r1, destination))));
         insertion.insert(withoutOrigin, List.of(r3));
-        assertThat(withoutOrigin.get(0).getNodes()).as("destination only").containsExactly(r3, r1, destination);
+        assertThat(withoutOrigin.getFirst().getNodes()).as("destination only").containsExactly(r3, r1, destination);
 
         List<TestPlan> closed = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a, destination))));
         insertion.insert(closed, List.of(m));
-        assertThat(closed.get(0).getNodes()).as("origin and destination: M goes between the depots")
+        assertThat(closed.getFirst().getNodes()).as("origin and destination: M goes between the depots")
                 .hasSize(4).startsWith(origin).endsWith(destination).contains(m, a);
 
         TestNode b = TestNode.customer("B", 0, 20, 1);
         MatrixCostCalculation openCalculation = calculation(List.of(origin, a, b));
         List<TestPlan> open = new ArrayList<>(List.of(new TestPlan("p", List.of(origin, a))));
         new TestInsertion(openCalculation, new AlwaysFeasibleChecker(), regret).insert(open, List.of(b));
-        assertThat(open.get(0).getNodes()).as("origin only").containsExactly(origin, a, b);
+        assertThat(open.getFirst().getNodes()).as("origin only").containsExactly(origin, a, b);
     }
 
     @Test
@@ -464,8 +464,8 @@ class InsertionAlgorithmTest {
         boolean inserted = new TestInsertion(calculation, new AlwaysFeasibleChecker(), false).insert(plans, b);
 
         assertThat(inserted).isTrue();
-        assertThat(plans.get(0).getNodes()).containsExactly(origin, a, b);
-        assertThat(PlanInvariants.referenceCost(plans.get(0))).isEqualTo(20);
+        assertThat(plans.getFirst().getNodes()).containsExactly(origin, a, b);
+        assertThat(PlanInvariants.referenceCost(plans.getFirst())).isEqualTo(20);
     }
 
 }

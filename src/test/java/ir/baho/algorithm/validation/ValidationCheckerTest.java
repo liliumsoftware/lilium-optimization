@@ -36,7 +36,7 @@ class ValidationCheckerTest {
         validation.validate(List.of(doublyInvalid));
 
         assertThat(validation.getInvalidNodes()).hasSize(1);
-        assertThat(validation.getInvalidNodes().get(0).getCause())
+        assertThat(validation.getInvalidNodes().getFirst().getCause())
                 .contains(TestValidation.DEMAND_REQUIRED)
                 .contains(TestValidation.CODE_REQUIRED);
     }
@@ -46,7 +46,7 @@ class ValidationCheckerTest {
         validation.validate(List.of(TestNode.customer("zero", 0, 20, 0)));
 
         // The demand rule passes one parameter, so the resolved message reflects that; the code rule passes none.
-        assertThat(validation.getInvalidNodes().get(0).getCause())
+        assertThat(validation.getInvalidNodes().getFirst().getCause())
                 .isEqualTo(TestValidation.DEMAND_REQUIRED + "1");
     }
 

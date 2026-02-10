@@ -96,7 +96,7 @@ class InsertionTest {
 
         List<TestNode> inserted = insertion.insert(plans, List.of(b, c));
         assertThat(inserted).containsExactlyInAnyOrder(b, c);
-        assertThat(plans.get(0).getNodes()).contains(b, c);
+        assertThat(plans.getFirst().getNodes()).contains(b, c);
     }
 
     @Test

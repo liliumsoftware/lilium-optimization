@@ -75,7 +75,7 @@ class MergeAlgorithmTest {
 
         assertThat(result).hasSize(1);
         assertThat(PlanInvariants.referenceTotalCost(result)).isEqualTo(40);
-        assertThat(result.get(0).getCustomers()).containsExactly(a, b);
+        assertThat(result.getFirst().getCustomers()).containsExactly(a, b);
         PlanInvariants.assertNodeLayout(result);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(a, b));
     }
@@ -89,12 +89,12 @@ class MergeAlgorithmTest {
                 closedPlan("p1", new TestTrackable("T1", 5), a),
                 closedPlan("p2", new TestTrackable("T2", 5), b)));
 
-        TestPlan merged = merge(calculation, assignment).apply(plans).get(0);
+        TestPlan merged = merge(calculation, assignment).apply(plans).getFirst();
 
         assertThat(merged.getNodes().stream().filter(n -> n.getType() == Nodeable.Type.ORIGIN)).hasSize(1);
         assertThat(merged.getNodes().stream().filter(n -> n.getType() == Nodeable.Type.DESTINATION)).hasSize(1);
-        assertThat(merged.getNodes().get(0)).isEqualTo(origin);
-        assertThat(merged.getNodes().get(merged.getNodes().size() - 1)).isEqualTo(destination);
+        assertThat(merged.getNodes().getFirst()).isEqualTo(origin);
+        assertThat(merged.getNodes().getLast()).isEqualTo(destination);
     }
 
     @Test
@@ -174,7 +174,7 @@ class MergeAlgorithmTest {
         // customers and serve each of them twice.
         assertThat(merge(calculation, assignment).applyPair(plans, plan, plan)).isFalse();
         assertThat(plans).hasSize(1);
-        assertThat(plans.get(0).getCustomers()).containsExactly(a);
+        assertThat(plans.getFirst().getCustomers()).containsExactly(a);
     }
 
     // ---------------------------------------------------------------- open plans and resources
@@ -194,7 +194,7 @@ class MergeAlgorithmTest {
 
         // 10 + 20 = 30 separately, 10 + 10 = 20 merged.
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getNodes()).containsExactly(origin, a, b);
+        assertThat(result.getFirst().getNodes()).containsExactly(origin, a, b);
         PlanInvariants.assertNodeLayout(result);
     }
 
@@ -212,7 +212,7 @@ class MergeAlgorithmTest {
                 .apply(plans);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getNodes()).containsExactly(origin, a, b, c);
+        assertThat(result.getFirst().getNodes()).containsExactly(origin, a, b, c);
         PlanInvariants.assertEveryPlanHasTrackable(result);
     }
 
@@ -228,7 +228,7 @@ class MergeAlgorithmTest {
         List<TestPlan> result = merge(calculation, assignment).apply(plans);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getNodes()).containsExactly(b, a, destination);
+        assertThat(result.getFirst().getNodes()).containsExactly(b, a, destination);
     }
 
     @Test

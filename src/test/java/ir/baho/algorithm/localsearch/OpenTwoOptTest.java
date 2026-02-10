@@ -93,7 +93,7 @@ class OpenTwoOptTest {
 
         assertThat(PlanInvariants.referenceCost(result)).isLessThan(50);
         assertThat(result.getNodes()).containsExactlyInAnyOrder(origin, a, b, c);
-        assertThat(result.getNodes().get(0)).isEqualTo(origin);
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
     }
 
     // ---------------------------------------------------------------- structure
@@ -106,9 +106,8 @@ class OpenTwoOptTest {
 
         TestPlan result = twoOpt(calculation).apply(plan);
 
-        assertThat(result.getNodes().get(0)).isEqualTo(origin);
-        assertThat(result.getNodes()
-                .get(result.getNodes().size() - 1)).as("the return depot must stay last").isEqualTo(destination);
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
+        assertThat(result.getNodes().getLast()).as("the return depot must stay last").isEqualTo(destination);
         assertThat(result.getNodes()).containsExactlyInAnyOrder(origin, a, b, c, destination);
         PlanInvariants.assertNodeLayout(List.of(result));
     }
@@ -154,7 +153,7 @@ class OpenTwoOptTest {
         MatrixCostCalculation calculation = calc(List.of(origin, a, b, c));
         TestPlan plan = new TestPlan("p", List.of(origin, c, b, a));
 
-        assertThat(twoOpt(calculation).apply(plan).getNodes().get(0)).isEqualTo(origin);
+        assertThat(twoOpt(calculation).apply(plan).getNodes().getFirst()).isEqualTo(origin);
     }
 
     @Test
@@ -207,7 +206,7 @@ class OpenTwoOptTest {
         FeasibilityChecker<TestPlan> aMayNotComeFirst = new FeasibilityChecker<>() {
             @Override
             public FeasibilityResult getResult(TestPlan plan) {
-                if (!plan.getCustomers().get(0).getCode().equals("A")) {
+                if (!plan.getCustomers().getFirst().getCode().equals("A")) {
                     return FeasibilityResult.FEASIBLE;
                 }
                 return new FeasibilityResult() {
@@ -272,7 +271,7 @@ class OpenTwoOptTest {
             assertThat(result.getNodes()).as("still a permutation of the same stops (seed %d)", seed)
                     .containsExactlyInAnyOrderElementsOf(initial);
             assertThat(result.getNodes()).doesNotHaveDuplicates();
-            assertThat(result.getNodes().get(0)).isEqualTo(origin);
+            assertThat(result.getNodes().getFirst()).isEqualTo(origin);
 
             // A local optimum: running again cannot improve further, and it terminates rather than oscillating.
             assertThat(PlanInvariants.referenceCost(twoOpt.apply(result.copy()))).isEqualTo(after);

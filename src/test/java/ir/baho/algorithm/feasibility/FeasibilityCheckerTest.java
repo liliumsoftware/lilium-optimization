@@ -105,8 +105,8 @@ class FeasibilityCheckerTest {
         List<ObjectError> errors = checker.getErrors(List.of(feasible, infeasible));
 
         assertThat(errors).hasSize(1);
-        assertThat(errors.get(0).objectName()).isEqualTo("bad-t");
-        assertThat(errors.get(0).defaultMessage()).isEqualTo("capacity.exceeded");
+        assertThat(errors.getFirst().objectName()).isEqualTo("bad-t");
+        assertThat(errors.getFirst().defaultMessage()).isEqualTo("capacity.exceeded");
     }
 
     @Test
@@ -128,7 +128,7 @@ class FeasibilityCheckerTest {
         List<ObjectError> errors = checker.getErrors(List.of(unassigned));
 
         assertThat(errors).hasSize(1);
-        assertThat(errors.get(0).objectName()).isEqualTo("loose");
+        assertThat(errors.getFirst().objectName()).isEqualTo("loose");
     }
 
 }

@@ -194,7 +194,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
                     .entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey,
                             nodes -> getBestPlans(getPlans(origin, nodes.getValue(),
                                     Stream.concat(initialPlans.stream().filter(p -> !p.getCustomers().isEmpty()
-                                                    && codesOf(nodes.getValue()).contains(p.getCustomers().get(0)
+                                                    && codesOf(nodes.getValue()).contains(p.getCustomers().getFirst()
                                                     .getCode())),
                                             previous.stream().filter(p -> Objects.equals(p.getZone(),
                                                     nodes.getKey()))).toList())).lambdaBeta()));
@@ -288,7 +288,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
             if (end == null && isClosedRoute(plan)) {
                 end = plan.getOrigin();
             }
-            ends.put(planCustomers.get(planCustomers.size() - 1).getCode(), end);
+            ends.put(planCustomers.getLast().getCode(), end);
         }
         return node -> ends.getOrDefault(node.getCode(), origin);
     }
@@ -320,7 +320,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
         for (P plan : plans) {
             List<N> planCustomers = plan.getCustomers();
             if (!planCustomers.isEmpty()) {
-                starts.put(planCustomers.get(0).getCode(), plan.getOrigin());
+                starts.put(planCustomers.getFirst().getCode(), plan.getOrigin());
             }
         }
         return node -> starts.getOrDefault(node.getCode(), origin);
@@ -389,11 +389,11 @@ public abstract class AbstractClarkeWrightAlgorithm<P
                 if (customers.isEmpty()) {
                     continue;
                 }
-                if (customers.get(0).getCode().equals(saving.destination().getCode())) {
+                if (customers.getFirst().getCode().equals(saving.destination().getCode())) {
                     secondPlan = plan;
                     continue;
                 }
-                if (customers.get(customers.size() - 1).getCode().equals(saving.origin().getCode())) {
+                if (customers.getLast().getCode().equals(saving.origin().getCode())) {
                     firstPlan = plan;
                 }
             }

@@ -104,7 +104,7 @@ public class ZoneSplitAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<
         for (List<P> group : groups) {
             group.sort(Comparator.comparingInt(positions::get));
         }
-        groups.sort(Comparator.comparingInt(group -> positions.get(group.get(0))));
+        groups.sort(Comparator.comparingInt(group -> positions.get(group.getFirst())));
         return groups;
     }
 
@@ -152,8 +152,8 @@ public class ZoneSplitAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<
         List<List<N>> largestGroups = groups.stream().limit(maxSplitCount).toList();
         groups.removeAll(largestGroups);
         while (!groups.isEmpty()) {
-            List<N> group = groups.remove(0);
-            largestGroups.stream().min(Comparator.comparing(List::size)).orElse(largestGroups.get(0)).addAll(group);
+            List<N> group = groups.removeFirst();
+            largestGroups.stream().min(Comparator.comparing(List::size)).orElse(largestGroups.getFirst()).addAll(group);
         }
         return largestGroups;
     }

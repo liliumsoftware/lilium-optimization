@@ -168,7 +168,7 @@ class KMedoidsAlgorithmTest {
         assertThat(result).hasSize(1);
         PlanInvariants.assertEveryPlanHasTrackable(result);
         PlanInvariants.assertNoDuplicateCustomers(result);
-        assertThat(result.get(0).getCustomers()).contains(east1, east2, east3).doesNotContain(westMedoid)
+        assertThat(result.getFirst().getCustomers()).contains(east1, east2, east3).doesNotContain(westMedoid)
                 .hasSize(5);
     }
 
@@ -233,8 +233,8 @@ class KMedoidsAlgorithmTest {
         List<TestPlan> eastFirst = kMedoids(calculation, 2, 9).apply(origin, List.of(middle),
                 new ArrayList<>(List.of(plan("e", east), plan("w", west))));
 
-        assertThat(westFirst.get(0).getCustomers()).containsExactlyInAnyOrder(west, middle);
-        assertThat(eastFirst.get(0).getCustomers()).containsExactlyInAnyOrder(east, middle);
+        assertThat(westFirst.getFirst().getCustomers()).containsExactlyInAnyOrder(west, middle);
+        assertThat(eastFirst.getFirst().getCustomers()).containsExactlyInAnyOrder(east, middle);
     }
 
     @Test
