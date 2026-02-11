@@ -28,7 +28,7 @@ class ZoneSplitAlgorithmTest {
         List<List<TestPlan>> groups = new ZoneSplitAlgorithm<>(calc, 10).groups(List.of(z1, z2, z3));
 
         assertThat(groups).hasSize(1);
-        assertThat(groups.get(0)).containsExactly(z1, z2, z3);   // input order within the group
+        assertThat(groups.getFirst()).containsExactly(z1, z2, z3);   // input order within the group
     }
 
     @Test
@@ -53,8 +53,8 @@ class ZoneSplitAlgorithmTest {
 
         assertThat(zoneSplit.groups(List.of(z1, z2))).hasSize(1);
         assertThat(zoneSplit.groups(List.of(z2, z1))).hasSize(1);
-        assertThat(zoneSplit.split(List.of(z1.getCustomers().get(0), z2.getCustomers().get(0)))).hasSize(1);
-        assertThat(zoneSplit.split(List.of(z2.getCustomers().get(0), z1.getCustomers().get(0)))).hasSize(1);
+        assertThat(zoneSplit.split(List.of(z1.getCustomers().getFirst(), z2.getCustomers().getFirst()))).hasSize(1);
+        assertThat(zoneSplit.split(List.of(z2.getCustomers().getFirst(), z1.getCustomers().getFirst()))).hasSize(1);
     }
 
     @Test
@@ -79,7 +79,7 @@ class ZoneSplitAlgorithmTest {
         List<List<TestPlan>> groups = new ZoneSplitAlgorithm<>(calc, 1).groups(List.of(z1, z2, z3));
 
         assertThat(groups).hasSize(1);
-        assertThat(groups.get(0)).containsExactlyInAnyOrder(z1, z2, z3);
+        assertThat(groups.getFirst()).containsExactlyInAnyOrder(z1, z2, z3);
     }
 
     @Test

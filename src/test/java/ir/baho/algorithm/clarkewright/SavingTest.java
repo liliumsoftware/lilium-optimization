@@ -107,7 +107,7 @@ class SavingTest {
         List<Saving> savings = cw.savings(origin, List.of(i, j, near), 1.0, 0);
 
         assertThat(savings).isSortedAccordingTo((left, right) -> Double.compare(right.value(), left.value()));
-        assertThat(savings.get(0).value()).isEqualTo(
+        assertThat(savings.getFirst().value()).isEqualTo(
                 savings.stream().mapToDouble(Saving::value).max().orElseThrow());
     }
 

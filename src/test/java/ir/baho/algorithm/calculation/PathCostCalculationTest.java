@@ -310,7 +310,7 @@ class PathCostCalculationTest {
             for (TestNode node : nodes) {
                 List<TestNode> ranking = calc.getClosestNodes(node.getCode());
                 assertThat(ranking).as("contains every node once").containsExactlyInAnyOrderElementsOf(nodes);
-                assertThat(ranking.get(0)).as("self ranks first at cost 0").isEqualTo(node);
+                assertThat(ranking.getFirst()).as("self ranks first at cost 0").isEqualTo(node);
                 for (int k = 0; k < ranking.size() - 1; k++) {
                     assertThat(calc.calculateCost(node, ranking.get(k)))
                             .isLessThanOrEqualTo(calc.calculateCost(node, ranking.get(k + 1)));
@@ -418,7 +418,7 @@ class PathCostCalculationTest {
         java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.atomic.AtomicInteger torn = new java.util.concurrent.atomic.AtomicInteger();
         List<Throwable> failures = java.util.Collections.synchronizedList(new ArrayList<>());
-        Thread writer = startThread(() -> {
+        Thread writer = Thread.ofPlatform().start(() -> {
             for (int i = 0; i < 2_000; i++) {
                 calc.initializeCostMatrix(i % 2 == 0 ? large : small);
             }
@@ -426,7 +426,7 @@ class PathCostCalculationTest {
         });
         List<Thread> readers = new ArrayList<>();
         for (int r = 0; r < 4; r++) {
-            readers.add(startThread(() -> {
+            readers.add(Thread.ofPlatform().start(() -> {
                 try {
                     while (!stop.get()) {
                         List<TestNode> ranking = calc.getClosestNodes("O");
@@ -488,12 +488,6 @@ class PathCostCalculationTest {
         assertThatThrownBy(() -> calc.getMedoid(new TestPlan("empty", List.of(o))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no customers");
-    }
-
-    private static Thread startThread(Runnable task) {
-        Thread thread = new Thread(task);
-        thread.start();
-        return thread;
     }
 
 }

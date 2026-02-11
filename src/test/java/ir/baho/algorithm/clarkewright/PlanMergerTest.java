@@ -123,7 +123,7 @@ class PlanMergerTest {
         List<TestPlan> result = new PlanMerger<>(List.of(second, first), first, second, merged).merge();
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0)).isSameAs(merged);
+        assertThat(result.getFirst()).isSameAs(merged);
     }
 
     @Test

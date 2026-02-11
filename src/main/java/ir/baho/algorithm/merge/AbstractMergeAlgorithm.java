@@ -118,7 +118,7 @@ public abstract class AbstractMergeAlgorithm<P
             tempFirstPlan.getNodes().addAll(tempSecondPlan.getNodes());
             // Plans of different shapes: keep the depot stops the merged route would otherwise lose.
             if (secondOrigin != null && tempFirstPlan.getOrigin() == null) {
-                tempFirstPlan.getNodes().add(0, secondOrigin);
+                tempFirstPlan.getNodes().addFirst(secondOrigin);
             }
             if (firstDestination != null && tempFirstPlan.getDestination() == null) {
                 tempFirstPlan.getNodes().add(firstDestination);

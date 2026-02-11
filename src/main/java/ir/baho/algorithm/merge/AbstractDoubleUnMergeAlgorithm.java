@@ -113,7 +113,7 @@ public abstract class AbstractDoubleUnMergeAlgorithm<P
 
             // Sorted so the orientation of the swap does not depend on hash iteration order.
             List<String> zones = firstPlan.getCustomers().stream().map(Nodeable::getZone).distinct().sorted().toList();
-            String firstZone = zones.get(0);
+            String firstZone = zones.getFirst();
             String secondZone = zones.get(1);
 
             List<N> firstNodes = tempFirstPlan.getCustomers().stream().filter(n -> n.getZone().equals(firstZone))

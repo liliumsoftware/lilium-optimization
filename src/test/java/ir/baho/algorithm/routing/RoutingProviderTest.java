@@ -365,7 +365,7 @@ class RoutingProviderTest {
             for (int n = 0; n < 20; n++) {
                 expected.add(path);
             }
-            threads.add(startThread(() -> {
+            threads.add(Thread.ofPlatform().start(() -> {
                 try {
                     for (int n = 0; n < 20; n++) {
                         assertThat(provider.getDuration(List.of(new Point(lon, 50.5), new Point(lon + 1, 51.5))))
@@ -407,12 +407,6 @@ class RoutingProviderTest {
         assertThatThrownBy(() -> provider.getDistance(List.of(new Point(1.0, 2.0))))
                 .isInstanceOf(RoutingException.class)
                 .hasMessageContaining("distance");
-    }
-
-    private static Thread startThread(Runnable task) {
-        Thread thread = new Thread(task);
-        thread.start();
-        return thread;
     }
 
 }

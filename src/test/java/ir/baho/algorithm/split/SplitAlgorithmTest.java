@@ -144,7 +144,7 @@ class SplitAlgorithmTest {
         List<TestNode> result = assertTimeoutPreemptively(Duration.ofSeconds(10), () -> split.split(nodes));
 
         assertThat(demands(result)).containsExactly(25);
-        assertThat(result.get(0).getCode()).isEqualTo("A");
+        assertThat(result.getFirst().getCode()).isEqualTo("A");
     }
 
     @Test
@@ -220,10 +220,10 @@ class SplitAlgorithmTest {
         // left for normal planning.
         assertThat(demands(result)).containsExactly(6, 4);
         assertThat(split.getSingleNodePlans()).hasSize(1);
-        assertThat(split.getSingleNodePlans().get(0).getCustomers())
+        assertThat(split.getSingleNodePlans().getFirst().getCustomers())
                 .extracting(TestNode::getDemand).containsExactly(6);
-        assertThat(split.getSingleNodePlans().get(0).getTrackable().getCode()).isEqualTo("large");
-        assertThat(split.getSingleNodePlans().get(0).getNodes().get(0)).isEqualTo(origin);
+        assertThat(split.getSingleNodePlans().getFirst().getTrackable().getCode()).isEqualTo("large");
+        assertThat(split.getSingleNodePlans().getFirst().getNodes().getFirst()).isEqualTo(origin);
     }
 
     @Test
@@ -291,7 +291,7 @@ class SplitAlgorithmTest {
         List<List<TestNode>> groups = new ZoneSplitAlgorithm<>(calculation, 10).split(new ArrayList<>(nodes));
 
         assertThat(groups).hasSize(1);
-        assertThat(groups.get(0)).containsExactlyInAnyOrderElementsOf(nodes);
+        assertThat(groups.getFirst()).containsExactlyInAnyOrderElementsOf(nodes);
     }
 
     @Test

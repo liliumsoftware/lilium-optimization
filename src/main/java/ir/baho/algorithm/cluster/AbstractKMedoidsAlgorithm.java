@@ -110,7 +110,7 @@ public abstract class AbstractKMedoidsAlgorithm<P
                     // Validate the plan set *with* the enlarged plan: resources are assigned against the candidate,
                     // not against the set it is about to replace, so a vehicle can never end up over capacity.
                     List<P> candidatePlans = new ArrayList<>(initialPlans);
-                    candidatePlans.set(initialPlans.indexOf(plan), initialPlan.get(0));
+                    candidatePlans.set(initialPlans.indexOf(plan), initialPlan.getFirst());
                     if (trackableAssignment.assign(candidatePlans)) {
                         initialPlans = candidatePlans;
                         plans = initialPlans;

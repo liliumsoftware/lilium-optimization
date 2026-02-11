@@ -104,7 +104,7 @@ class TrackableAssignmentTest {
         List<TestPlan> plans = List.of(plan("p", 4));
 
         assertThat(assignment.assign(plans)).isTrue();
-        assertThat(plans.get(0).getTrackable().getCode()).isEqualTo("big");
+        assertThat(plans.getFirst().getTrackable().getCode()).isEqualTo("big");
     }
 
     @Test
@@ -140,7 +140,7 @@ class TrackableAssignmentTest {
 
         TestPlan newPlan = plan("p2", 1);
         assertThat(assignment.assign(existing, newPlan)).isTrue();
-        assertThat(newPlan.getTrackable()).isNotEqualTo(existing.get(0).getTrackable());
+        assertThat(newPlan.getTrackable()).isNotEqualTo(existing.getFirst().getTrackable());
     }
 
     @Test
@@ -168,7 +168,7 @@ class TrackableAssignmentTest {
         List<TestPlan> plans = List.of(plan("p1", 1));
 
         assertThat(assignment.assignWithTrackables(plans, List.of(inPool))).isTrue();
-        assertThat(plans.get(0).getTrackable()).isEqualTo(inPool);
+        assertThat(plans.getFirst().getTrackable()).isEqualTo(inPool);
 
         assertThat(assignment.assignWithTrackables(List.of(plan("a", 1), plan("b", 1)), List.of(inPool)))
                 .as("a one-unit sub-pool cannot cover two plans").isFalse();
@@ -184,13 +184,13 @@ class TrackableAssignmentTest {
 
         TestPlan newPlan = plan("p2", 1);
         assertThat(assignment.assignWithTrackables(existing, newPlan, List.of(first, second))).isTrue();
-        assertThat(newPlan.getTrackable()).isNotEqualTo(existing.get(0).getTrackable());
+        assertThat(newPlan.getTrackable()).isNotEqualTo(existing.getFirst().getTrackable());
 
         // A sub-pool holding only the already-used unit leaves nothing to hand out.
         assertThat(assignment.assignWithTrackables(existing, plan("p3", 1),
-                List.of(existing.get(0).getTrackable()))).isFalse();
+                List.of(existing.getFirst().getTrackable()))).isFalse();
         // And, as with the other single-plan overload, a plan already in the list is refused outright.
-        assertThat(assignment.assignWithTrackables(existing, existing.get(0), List.of(first, second))).isFalse();
+        assertThat(assignment.assignWithTrackables(existing, existing.getFirst(), List.of(first, second))).isFalse();
     }
 
     @Test
@@ -262,8 +262,8 @@ class TrackableAssignmentTest {
         List<TestPlan> plans = new ArrayList<>(List.of(plan("mine", 1)));
 
         assertThat(assignment.assign(otherPlans, plans)).isTrue();
-        assertThat(plans.get(0).getTrackable())
-                .isNotEqualTo(otherPlans.get(0).getTrackable());
+        assertThat(plans.getFirst().getTrackable())
+                .isNotEqualTo(otherPlans.getFirst().getTrackable());
     }
 
     @Test
@@ -317,8 +317,8 @@ class TrackableAssignmentTest {
 
         assignment.repairReassign(plans);
 
-        assertThat(plans.get(0).getTrackable().getCode()).isEqualTo("fast");
-        assertThat(plans.get(0).getCost()).isEqualTo(200);
+        assertThat(plans.getFirst().getTrackable().getCode()).isEqualTo("fast");
+        assertThat(plans.getFirst().getCost()).isEqualTo(200);
     }
 
     @Test
@@ -384,8 +384,8 @@ class TrackableAssignmentTest {
         TestPlan extra = plan("p3", 1);
         assertThat(assignment.assignWithTrackables(plans, extra, assignment.getTrackables()))
                 .as("units held by the other plans stay available").isTrue();
-        assertThat(extra.getTrackable()).isEqualTo(plans.get(0).getTrackable());
-        assertThat(assignment.assignWithTrackables(plans, plans.get(0), assignment.getTrackables()))
+        assertThat(extra.getTrackable()).isEqualTo(plans.getFirst().getTrackable());
+        assertThat(assignment.assignWithTrackables(plans, plans.getFirst(), assignment.getTrackables()))
                 .as("a plan already in the list is still refused").isFalse();
     }
 
@@ -537,7 +537,7 @@ class TrackableAssignmentTest {
 
         assignment.repairReassign(plans);
 
-        assertThat(plans.get(0).getTrackable()).hasToString("C#0");
+        assertThat(plans.getFirst().getTrackable()).hasToString("C#0");
     }
 
     @Test
@@ -551,7 +551,7 @@ class TrackableAssignmentTest {
 
         assertThat(assignment.assign(List.of(other), plans)).isTrue();
 
-        assertThat(plans.get(0).getTrackable()).hasToString("A#0");
+        assertThat(plans.getFirst().getTrackable()).hasToString("A#0");
     }
 
     @Test
@@ -566,7 +566,7 @@ class TrackableAssignmentTest {
 
         assertThat(other.getTrackable()).isEqualTo(unit(assignment.getTrackables(), "T2#0"));
         assertThat(assignment.assign(List.of(other), plans)).as("the only unit is already in use").isFalse();
-        assertThat(plans.get(0).getTrackable()).isNull();
+        assertThat(plans.getFirst().getTrackable()).isNull();
     }
 
     @Test
@@ -714,7 +714,7 @@ class TrackableAssignmentTest {
 
         assertTimeoutPreemptively(Duration.ofSeconds(30), () -> notWorse.reassign(plans));
 
-        assertThat(plans.get(0).getTrackable()).isNotNull();
+        assertThat(plans.getFirst().getTrackable()).isNotNull();
     }
 
     @Test

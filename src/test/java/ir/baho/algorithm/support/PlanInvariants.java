@@ -86,7 +86,7 @@ public final class PlanInvariants {
             List<TestNode> nodes = plan.getNodes();
             assertThat(nodes).as("plan %s is not empty", plan.getCode()).isNotEmpty();
             assertThat(nodes).as("plan %s holds no null node", plan.getCode()).doesNotContainNull();
-            assertThat(nodes.get(0).getType()).as("plan %s starts at an ORIGIN", plan.getCode())
+            assertThat(nodes.getFirst().getType()).as("plan %s starts at an ORIGIN", plan.getCode())
                     .isEqualTo(Nodeable.Type.ORIGIN);
             assertThat(nodes.stream().filter(n -> n.getType() == Nodeable.Type.ORIGIN))
                     .as("plan %s has exactly one origin", plan.getCode()).hasSize(1);
@@ -94,10 +94,10 @@ public final class PlanInvariants {
             assertThat(destinations).as("plan %s has at most one destination", plan.getCode())
                     .hasSizeLessThanOrEqualTo(1);
             if (!destinations.isEmpty()) {
-                assertThat(nodes.get(nodes.size() - 1)).as("plan %s ends at its DESTINATION", plan.getCode())
-                        .isEqualTo(destinations.get(0));
+                assertThat(nodes.getLast()).as("plan %s ends at its DESTINATION", plan.getCode())
+                        .isEqualTo(destinations.getFirst());
             } else {
-                assertThat(nodes.get(nodes.size() - 1).getType()).as("open plan %s ends at a customer", plan.getCode())
+                assertThat(nodes.getLast().getType()).as("open plan %s ends at a customer", plan.getCode())
                         .isEqualTo(Nodeable.Type.CUSTOMER);
             }
         }
@@ -108,10 +108,9 @@ public final class PlanInvariants {
      */
     public static void assertStartsAndEndsAtDepot(Collection<TestPlan> plans, TestNode origin, TestNode destination) {
         for (TestPlan plan : plans) {
-            assertThat(plan.getNodes().get(0)).as("plan %s starts at the depot", plan.getCode()).isEqualTo(origin);
+            assertThat(plan.getNodes().getFirst()).as("plan %s starts at the depot", plan.getCode()).isEqualTo(origin);
             if (destination != null) {
-                assertThat(plan.getNodes()
-                        .get(plan.getNodes().size() - 1)).as("plan %s returns to the depot", plan.getCode())
+                assertThat(plan.getNodes().getLast()).as("plan %s returns to the depot", plan.getCode())
                         .isEqualTo(destination);
             }
         }

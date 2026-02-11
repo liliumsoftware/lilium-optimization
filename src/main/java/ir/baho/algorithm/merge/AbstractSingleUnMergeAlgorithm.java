@@ -113,7 +113,7 @@ public abstract class AbstractSingleUnMergeAlgorithm<P
             P tempFirstPlan = tempPlans.get(plans.indexOf(firstPlan));
             P tempSecondPlan = tempPlans.get(plans.indexOf(secondPlan));
 
-            String zone = firstPlan.getCustomers().get(0).getZone();
+            String zone = firstPlan.getCustomers().getFirst().getZone();
 
             List<N> secondNodes = tempSecondPlan.getCustomers().stream().filter(n -> zone.equals(n.getZone())).toList();
             tempSecondPlan.getNodes().removeAll(secondNodes);

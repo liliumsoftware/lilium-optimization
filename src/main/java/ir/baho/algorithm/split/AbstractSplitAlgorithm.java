@@ -55,7 +55,7 @@ public abstract class AbstractSplitAlgorithm<P
             log.trace("Can not split, no trackable available");
             return nodes;
         }
-        T smallestTrackable = sortedTrackables.get(0);
+        T smallestTrackable = sortedTrackables.getFirst();
         Map<N, Integer> pieces = new IdentityHashMap<>();
         for (int i = 0; i < nodes.size(); i++) {
             N node = nodes.get(i);

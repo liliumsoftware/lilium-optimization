@@ -35,7 +35,7 @@ class BinPackingTest {
     void singleFittingBinIsPlacedAtOrigin() {
         List<Position<TestBin>> positions = packer(100, 100, 100).pack(List.of(new TestBin("a", 10, 10, 10)));
         assertThat(positions).hasSize(1);
-        assertThat(positions.get(0).level()).isEqualTo(1);
+        assertThat(positions.getFirst().level()).isEqualTo(1);
     }
 
     @Test

@@ -64,7 +64,7 @@ class ZoneGroupsTest {
         List<String> calls = Collections.synchronizedList(new ArrayList<>());
 
         List<TestPlan> result = ZoneGroups.apply(calculation(), assignment, 2, plans, (others, group) -> {
-            String zone = group.get(0).getZone();
+            String zone = group.getFirst().getZone();
             List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).toList());
             candidate.add(plan(zone + "-extra", zone, origin, zone.equals("Z1") ? z1b : z2d));
             boolean assigned = assignment.assign(others, candidate);
@@ -90,7 +90,7 @@ class ZoneGroupsTest {
         List<String> calls = Collections.synchronizedList(new ArrayList<>());
 
         List<TestPlan> result = ZoneGroups.apply(calculation(), assignment, 2, plans, (others, group) -> {
-            String zone = group.get(0).getZone();
+            String zone = group.getFirst().getZone();
             List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).toList());
             if (zone.equals("Z1")) {
                 candidate.add(plan("Z1-extra", zone, origin, z1b));
@@ -115,7 +115,7 @@ class ZoneGroupsTest {
         assertThat(assignment.assign(plans)).isTrue();
 
         ZoneGroups.apply(calculation(), assignment, 2, plans, (others, group) -> {
-            assertThat(others).containsExactly(group.get(0) == p1 ? p2 : p1);
+            assertThat(others).containsExactly(group.getFirst() == p1 ? p2 : p1);
             assertThatThrownBy(() -> others.add(p1)).isInstanceOf(UnsupportedOperationException.class);
             return group;
         });

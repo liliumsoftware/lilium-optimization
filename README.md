@@ -29,8 +29,8 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 
 ## Requirements
 
-- Java 17 or newer.
-- Apache Maven 3.9.11 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Java 21 or newer.
+- Apache Maven 3.9.12 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 

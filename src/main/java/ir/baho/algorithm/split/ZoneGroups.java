@@ -51,7 +51,7 @@ public final class ZoneGroups {
             return new ArrayList<>();
         }
         if (groups.size() == 1) {
-            return new ArrayList<>(optimizer.apply(new ArrayList<>(), groups.get(0)));
+            return new ArrayList<>(optimizer.apply(new ArrayList<>(), groups.getFirst()));
         }
         List<List<P>> heldUnitsOnly = new ArrayList<>(groups.size());
         for (int g = 0; g < groups.size(); g++) {
