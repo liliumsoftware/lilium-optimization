@@ -1,11 +1,10 @@
 package ir.baho.algorithm.routing;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,14 +19,14 @@ import java.util.List;
  * <p>The legacy object form is still accepted on input so payloads persisted before the array form became the
  * output format keep deserializing.
  */
-public class LngLatAltDeserializer extends JsonDeserializer<LngLatAlt> {
+public class LngLatAltDeserializer extends ValueDeserializer<LngLatAlt> {
 
     /**
      * Accepts a coordinate array or the legacy {@code {"longitude": …}} object; anything else is reported through the
      * context as an unexpected token.
      */
     @Override
-    public LngLatAlt deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+    public LngLatAlt deserialize(JsonParser parser, DeserializationContext context) {
         JsonToken token = parser.currentToken();
         if (token == JsonToken.START_ARRAY) {
             return readCoordinateArray(parser, context);
@@ -38,7 +37,7 @@ public class LngLatAltDeserializer extends JsonDeserializer<LngLatAlt> {
         return (LngLatAlt) context.handleUnexpectedToken(LngLatAlt.class, parser);
     }
 
-    private LngLatAlt readCoordinateArray(JsonParser parser, DeserializationContext context) throws IOException {
+    private LngLatAlt readCoordinateArray(JsonParser parser, DeserializationContext context) {
         List<Double> values = new ArrayList<>();
         while (parser.nextToken() != JsonToken.END_ARRAY) {
             values.add(readDouble(parser));
@@ -52,7 +51,7 @@ public class LngLatAltDeserializer extends JsonDeserializer<LngLatAlt> {
                 values.subList(Math.min(3, values.size()), values.size()));
     }
 
-    private LngLatAlt readLegacyObject(JsonParser parser) throws IOException {
+    private LngLatAlt readLegacyObject(JsonParser parser) {
         double longitude = 0;
         double latitude = 0;
         double altitude = Double.NaN;
@@ -97,9 +96,9 @@ public class LngLatAltDeserializer extends JsonDeserializer<LngLatAlt> {
      * Numbers arrive as numeric tokens; {@code NaN}/{@code Infinity} survive JSON only as quoted strings, which
      * is how the altitude of an altitude-less coordinate used to be written.
      */
-    private double readDouble(JsonParser parser) throws IOException {
+    private double readDouble(JsonParser parser) {
         if (parser.currentToken() == JsonToken.VALUE_STRING) {
-            return Double.parseDouble(parser.getText());
+            return Double.parseDouble(parser.getString());
         }
         return parser.getDoubleValue();
     }

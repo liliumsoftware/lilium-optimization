@@ -18,8 +18,8 @@
         <maven.javadoc.version>3.11.2</maven.javadoc.version>
         <lombok.version>1.18.42</lombok.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <jackson.version>2.20.0</jackson.version>
-        <junit.version>5.13.4</junit.version>
+        <jackson.version>3.1.0</jackson.version>
+        <junit.version>6.0.1</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <jacoco.version>0.8.13</jacoco.version>
         <maven.checkstyle.version>3.6.0</maven.checkstyle.version>
@@ -40,7 +40,7 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
             <scope>provided</scope>
