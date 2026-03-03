@@ -1,11 +1,11 @@
 package ir.baho.algorithm.routing;
 
-import com.fasterxml.jackson.core.JacksonException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -255,7 +255,7 @@ public class RoutingProvider {
      *                          {@code NullPointerException} (OSRM error answers such as {@code NoRoute} arrive
      *                          with a non-200 status and are rejected earlier)
      */
-    private JsonNode firstRoute(String response) throws RoutingException, JacksonException {
+    private JsonNode firstRoute(String response) throws RoutingException {
         JsonNode routes = this.mapper.readTree(response).get("routes");
         if (routes == null || !routes.isArray() || routes.isEmpty()) {
             throw new RoutingException("Routing service response contains no route");

@@ -1,8 +1,8 @@
 package ir.baho.algorithm.routing;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.DatabindException;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +19,7 @@ class GeoJsonTest {
     private final JsonMapper mapper = JsonMapper.builder().build();
 
     @Test
-    void pointRoundTripsThroughTheTypeDiscriminator() throws Exception {
+    void pointRoundTripsThroughTheTypeDiscriminator() {
         Point original = new Point(1.5, 2.5);
 
         String json = mapper.writeValueAsString(original);
@@ -30,7 +30,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void multiPointRoundTripsThroughTheTypeDiscriminator() throws Exception {
+    void multiPointRoundTripsThroughTheTypeDiscriminator() {
         MultiPoint original = new MultiPoint(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0));
 
         String json = mapper.writeValueAsString(original);
@@ -41,7 +41,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void lineStringRoundTripsThroughTheTypeDiscriminator() throws Exception {
+    void lineStringRoundTripsThroughTheTypeDiscriminator() {
         LineString original = new LineString(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0));
 
         String json = mapper.writeValueAsString(original);
@@ -52,7 +52,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void osrmGeometryPayloadDeserializesIntoCoordinates() throws Exception {
+    void osrmGeometryPayloadDeserializesIntoCoordinates() {
         String payload = "{\"type\":\"LineString\",\"coordinates\":[[1.0,2.0],[3.0,4.0]]}";
 
         LineString geometry = mapper.readValue(payload, LineString.class);
@@ -62,7 +62,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void altitudeSurvivesRoundTripAndAbsentAltitudeStaysNaN() throws Exception {
+    void altitudeSurvivesRoundTripAndAbsentAltitudeStaysNaN() {
         Point withAltitude = new Point(1.0, 2.0, 3.0);
         Point withoutAltitude = new Point(1.0, 2.0);
 
@@ -76,7 +76,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void unknownPropertiesAreIgnored() throws Exception {
+    void unknownPropertiesAreIgnored() {
         String payload = "{\"type\":\"LineString\",\"coordinates\":[[1.0,2.0]],\"unexpected\":{\"a\":1}}";
 
         LineString geometry = mapper.readValue(payload, LineString.class);
@@ -85,7 +85,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void equalityIsValueBased() throws Exception {
+    void equalityIsValueBased() {
         Point one = new Point(1.0, 2.0);
         Point other = new Point(1.0, 2.0);
 
@@ -100,7 +100,7 @@ class GeoJsonTest {
     @Test
     // the equals contract under test
     @SuppressWarnings("EqualsBetweenInconvertibleTypes")
-    void geometriesOfDifferentClassesAreNeverEqual() throws Exception {
+    void geometriesOfDifferentClassesAreNeverEqual() {
         MultiPoint multiPoint = new MultiPoint(new LngLatAlt(1.0, 2.0));
         LineString lineString = new LineString(new LngLatAlt(1.0, 2.0));
         Point point = new Point(1.0, 2.0);
@@ -113,7 +113,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void crsParticipatesInEquality() throws Exception {
+    void crsParticipatesInEquality() {
         Point withoutCrs = new Point(1.0, 2.0);
         Point withCrs = new Point(1.0, 2.0);
         withCrs.setCrs(new Crs());
@@ -133,7 +133,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void bboxParticipatesInEquality() throws Exception {
+    void bboxParticipatesInEquality() {
         Point one = new Point(1.0, 2.0);
         one.setBbox(new double[] {0.0, 0.0, 10.0, 10.0});
         Point same = new Point(1.0, 2.0);
@@ -147,7 +147,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void crsDefaultsToNamedTypeWithEmptyProperties() throws Exception {
+    void crsDefaultsToNamedTypeWithEmptyProperties() {
         Crs crs = new Crs();
 
         assertThat(crs.getType()).isEqualTo(CrsType.NAME);
@@ -156,7 +156,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void crsPropertiesParticipateInEquality() throws Exception {
+    void crsPropertiesParticipateInEquality() {
         Crs named = new Crs();
         named.getProperties().put("name", "urn:ogc:def:crs:EPSG::4326");
         Crs sameName = new Crs();
@@ -167,7 +167,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void addIsFluentAndAppendsInOrder() throws Exception {
+    void addIsFluentAndAppendsInOrder() {
         MultiPoint geometry = new MultiPoint();
 
         Geometry<LngLatAlt> returned = geometry.add(new LngLatAlt(1.0, 2.0)).add(new LngLatAlt(3.0, 4.0));
@@ -178,7 +178,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void varargsConstructorPreservesOrder() throws Exception {
+    void varargsConstructorPreservesOrder() {
         LineString geometry = new LineString(new LngLatAlt(3.0, 4.0), new LngLatAlt(1.0, 2.0), new LngLatAlt(5.0, 6.0));
 
         assertThat(geometry.getCoordinates())
@@ -186,14 +186,14 @@ class GeoJsonTest {
     }
 
     @Test
-    void emptyGeometryHasEmptyCoordinateList() throws Exception {
+    void emptyGeometryHasEmptyCoordinateList() {
         assertThat(new MultiPoint().getCoordinates()).isEmpty();
         assertThat(new LineString().getCoordinates()).isEmpty();
         assertThat(new Point().getCoordinates()).isNull();
     }
 
     @Test
-    void bboxAndCrsSurviveSerialization() throws Exception {
+    void bboxAndCrsSurviveSerialization() {
         LineString original = new LineString(new LngLatAlt(1.0, 2.0), new LngLatAlt(3.0, 4.0));
         original.setBbox(new double[] {1.0, 2.0, 3.0, 4.0});
         Crs crs = new Crs();
@@ -211,7 +211,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void coordinatesUseTheGeoJsonArrayFormNotABeanObject() throws Exception {
+    void coordinatesUseTheGeoJsonArrayFormNotABeanObject() {
         // Regression: a coordinate must be written/read as [longitude, latitude(, altitude, extra…)]. Serialized
         // as a bean ({"longitude":…}) nothing can parse a real OSRM geometry, which is what broke getRoute.
         assertThat(mapper.writeValueAsString(new Point(1.5, 2.5)))
@@ -229,14 +229,14 @@ class GeoJsonTest {
     }
 
     @Test
-    void coordinateArrayShorterThanTwoElementsIsRejected() throws Exception {
+    void coordinateArrayShorterThanTwoElementsIsRejected() {
         assertThatThrownBy(() -> mapper.readValue("{\"type\":\"Point\",\"coordinates\":[1.0]}", Point.class))
-                .isInstanceOf(JsonMappingException.class)
+                .isInstanceOf(DatabindException.class)
                 .hasMessageContaining("longitude");
     }
 
     @Test
-    void legacyBeanFormIsStillAccepted() throws Exception {
+    void legacyBeanFormIsStillAccepted() {
         // Payloads persisted before the array form became the output format must keep deserializing.
         Point restored = mapper.readValue(
                 "{\"type\":\"Point\",\"coordinates\":{\"longitude\":1.5,\"latitude\":2.5,\"altitude\":\"NaN\"}}",
@@ -247,7 +247,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void crsTypesUseTheLowercaseNamesOfTheGeoJsonSpecification() throws Exception {
+    void crsTypesUseTheLowercaseNamesOfTheGeoJsonSpecification() {
         // GeoJSON (2008) writes "type":"name" / "type":"link"; the enum constants used to be written in upper case and
         // a standard lowercase payload was rejected.
         assertThat(mapper.writeValueAsString(new Crs())).contains("\"type\":\"name\"");
@@ -264,7 +264,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void aLegacyCoordinateWithNullAdditionalElementsIsAccepted() throws Exception {
+    void aLegacyCoordinateWithNullAdditionalElementsIsAccepted() {
         LngLatAlt restored = mapper.readValue(
                 "{\"longitude\":1,\"latitude\":2,\"altitude\":3,\"additionalElements\":null}", LngLatAlt.class);
 
@@ -272,7 +272,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void aLegacyCoordinateWithANullAltitudeHasNoAltitude() throws Exception {
+    void aLegacyCoordinateWithANullAltitudeHasNoAltitude() {
         // A bean whose altitude was never set may have been written as null; reading it failed with
         // InputCoercionException.
         LngLatAlt restored = mapper.readValue("{\"longitude\":1,\"latitude\":2,\"altitude\":null}", LngLatAlt.class);
@@ -282,7 +282,7 @@ class GeoJsonTest {
     }
 
     @Test
-    void absentCrsAndBboxAreOmittedFromJson() throws Exception {
+    void absentCrsAndBboxAreOmittedFromJson() {
         String json = mapper.writeValueAsString(new Point(1.0, 2.0));
 
         assertThat(json).doesNotContain("crs").doesNotContain("bbox");
