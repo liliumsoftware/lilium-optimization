@@ -1,16 +1,19 @@
 package ir.baho.algorithm.clarkewright;
 
 import ir.baho.algorithm.OptimizationType;
+import ir.baho.algorithm.calculation.PathCostCalculation;
 import ir.baho.algorithm.support.MatrixCostCalculation;
 import ir.baho.algorithm.support.NoOpLocalSearch;
 import ir.baho.algorithm.support.TestAssignment;
 import ir.baho.algorithm.support.TestClarkeWright;
 import ir.baho.algorithm.support.TestNode;
+import ir.baho.algorithm.support.TestPlan;
 import ir.baho.algorithm.support.TestTrackable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,9 +61,12 @@ class SavingTest {
     @Test
     void betaVariantCombinesBothMergeDirections() {
         TestClarkeWright cw = clarkeWright();
-        // With a symmetric metric s(i,j) == s(j,i) == 20 at lambda 1, so
-        // result = (beta + max) + ((1 - beta) * min) = (0.5 + 20) + (0.5 * 20) = 30.5
-        assertThat(cw.savingValue(origin, i, j, 1.0, 0.5)).isEqualTo(30.5);
+        // With a symmetric metric s(i,j) == s(j,i) == 20 at lambda 1, so every convex blend is 20:
+        // result = beta * max + (1 - beta) * min = 0.5 * 20 + 0.5 * 20 = 20.
+        // (Regression: the formula used to *add* beta, giving 30.5 - a constant shift that weighted the larger
+        // orientation fully whatever beta was.)
+        assertThat(cw.savingValue(origin, i, j, 1.0, 0.5)).isEqualTo(20.0);
+        assertThat(cw.savingValue(origin, i, j, 1.0, 1.0)).isEqualTo(20.0);
     }
 
     @Test
@@ -112,6 +118,20 @@ class SavingTest {
     }
 
     @Test
+    void betaSavingsUseTheBlendedFormulaWhenBetaIsPositive() {
+        TestClarkeWright cw = clarkeWright();
+
+        List<Saving> plain = cw.savings(origin, List.of(i, j), 1.0, 0);
+        List<Saving> blended = cw.savings(origin, List.of(i, j), 1.0, 0.5);
+
+        // Under this symmetric metric both orientations are worth 20, so any convex blend equals the plain saving;
+        // the beta path must still yield the same pairs, best-first. (The asymmetric case is covered separately.)
+        assertThat(plain).extracting(Saving::value).containsExactly(20.0, 20.0);
+        assertThat(blended).hasSameSizeAs(plain);
+        assertThat(blended).extracting(Saving::value).containsExactly(20.0, 20.0);
+    }
+
+    @Test
     void reversedValueComparatorSortsBestFirstThenByOriginCode() {
         Saving low = new Saving(TestNode.customer("A", 0, 0, 1), j, 5);
         Saving high = new Saving(TestNode.customer("B", 0, 0, 1), j, 10);
@@ -130,16 +150,42 @@ class SavingTest {
     }
 
     @Test
-    void betaSavingsAreProducedWhenBetaIsPositive() {
-        TestClarkeWright cw = clarkeWright();
+    void betaWeightsTheBetterOrientationUnderAnAsymmetricCostModel() {
+        // Depot O, I and J placed so that s(I,J) != s(J,I) under a direction-dependent metric: use the plan-aware
+        // cost hook of an anonymous calculation that charges 2x when travelling "down" (decreasing y).
+        TestNode o = TestNode.origin("O", 0, 0);
+        TestNode p = TestNode.customer("P", 0, 10, 1);
+        TestNode q = TestNode.customer("Q", 0, 30, 1);
+        PathCostCalculation<TestPlan, TestNode, Long> calculation = new PathCostCalculation<>(
+                OptimizationType.NO_RESTRICTION, Map.of()) {
+            @Override
+            protected Long[][] getCostMatrix(List<TestNode> nodes) {
+                Long[][] matrix = new Long[nodes.size()][nodes.size()];
+                for (int r = 0; r < nodes.size(); r++) {
+                    for (int c = 0; c < nodes.size(); c++) {
+                        long base = nodes.get(r).manhattanTo(nodes.get(c));
+                        matrix[r][c] = nodes.get(c).getY() < nodes.get(r).getY() ? 2 * base : base;
+                    }
+                }
+                return matrix;
+            }
+        };
+        calculation.initializeCostMatrix(List.of(o, p, q));
+        TestClarkeWright cw = new TestClarkeWright(calculation, new TestAssignment(List.of(new TestTrackable("T", 9))),
+                new NoOpLocalSearch(), null, OptimizationType.NO_RESTRICTION);
 
-        List<Saving> plain = cw.savings(origin, List.of(i, j), 1.0, 0);
-        List<Saving> blended = cw.savings(origin, List.of(i, j), 1.0, 0.5);
-
-        // The beta path must produce the same pairs, in the same best-first order, with the blended value.
-        assertThat(blended).hasSameSizeAs(plain);
-        assertThat(blended.get(0).value()).isNotEqualTo(plain.get(0).value());
-        assertThat(blended.get(0).value()).isEqualTo(30.5);
+        double spq = cw.savingValue(o, p, q, 1.0);   // c(P,O)=2*10 + c(O,Q)=30 - c(P,Q)=20  = 30
+        double sqp = cw.savingValue(o, q, p, 1.0);   // c(Q,O)=2*30 + c(O,P)=10 - c(Q,P)=2*20 = 30
+        assertThat(spq).isEqualTo(30.0);
+        assertThat(sqp).isEqualTo(30.0);
+        // Make the two directions differ via lambda, then check the blend sits between min and max.
+        double a = cw.savingValue(o, p, q, 0.5);     // 20 + 30 - 10 = 40
+        double b = cw.savingValue(o, q, p, 0.5);     // 60 + 10 - 20 = 50
+        assertThat(a).isEqualTo(40.0);
+        assertThat(b).isEqualTo(50.0);
+        assertThat(cw.savingValue(o, p, q, 0.5, 1.0)).isEqualTo(50.0);   // beta 1 -> the better direction
+        assertThat(cw.savingValue(o, p, q, 0.5, 0.5)).isEqualTo(45.0);   // beta 0.5 -> the average
+        assertThat(cw.savingValue(o, p, q, 0.5, 0.2)).isEqualTo(0.2 * 50 + 0.8 * 40);
     }
 
 }
