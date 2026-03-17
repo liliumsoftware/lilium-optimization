@@ -42,7 +42,7 @@ import java.util.stream.Stream;
  * <p>The classic algorithm is generalized along two axes:</p>
  * <ul>
  *   <li><b>λ / β parameter sweep.</b> {@code lambda} scales the direct edge term in the saving formula;
- *       {@code beta} weights the smaller asymmetric orientation (i&rarr;j vs. j&rarr;i) against the larger one;
+ *       {@code beta} blends the two asymmetric orientations (i&rarr;j vs. j&rarr;i), weighting the better one by β;
  *       both orientations then share one value, and the one with the better plain saving is tried first. The full
  *       {@code lambdas × betas} grid is evaluated on a {@code parallelStream} and {@link #getBestPlans} keeps the
  *       strongest resulting plan set
@@ -526,11 +526,12 @@ public abstract class AbstractClarkeWrightAlgorithm<P
     }
 
     /**
-     * The β variant used when {@code beta > 0}: {@code beta + max(s_ij, s_ji) + (1 − beta)·min(s_ij, s_ji)}, where
-     * {@code s} is the λ-saving of each direction computed from its own route start and end. Note that {@code beta}
-     * enters as an <em>additive</em> term, so the larger orientation always carries full weight and {@code beta} only
-     * scales how much the smaller one contributes. Both orientations get the same value; {@link #getSavings} tries
-     * the one with the better plain saving first.
+     * The β variant used when {@code beta > 0}: a convex blend of the two orientations,
+     * {@code beta·max(s_ij, s_ji) + (1 − beta)·min(s_ij, s_ji)}, where {@code s} is the λ-saving of each direction
+     * computed from its own route start and end. {@code beta = 1} keeps only the better orientation,
+     * {@code beta = 0.5} averages them. Both orientations get the same value; {@link #getSavings} tries the one with
+     * the better plain saving first. (Earlier versions added {@code beta} instead of multiplying by it, which merely
+     * shifted every saving by a constant.)
      *
      * @param routeStartI where {@code nodeI}'s route starts, or {@code null} without an origin stop
      * @param routeStartJ where {@code nodeJ}'s route starts, or {@code null} without an origin stop
@@ -541,7 +542,7 @@ public abstract class AbstractClarkeWrightAlgorithm<P
             double lambda, double beta) {
         double sij = getSavingValue(routeStartJ, routeEndI, nodeI, nodeJ, lambda);
         double sji = getSavingValue(routeStartI, routeEndJ, nodeJ, nodeI, lambda);
-        return (beta + Math.max(sij, sji)) + ((1d - beta) * Math.min(sij, sji));
+        return (beta * Math.max(sij, sji)) + ((1d - beta) * Math.min(sij, sji));
     }
 
     /**
