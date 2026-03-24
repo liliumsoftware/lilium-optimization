@@ -66,6 +66,45 @@ class TwoOptTest {
         return result;
     }
 
+    @Test
+    void openPlanReversalMayMoveTheLastCustomer() {
+        // Regression: the reversal bound excluded the last node unconditionally, so on an OPEN plan the final
+        // customer could never move and O->C->A->B (60) got stuck at O->A->C->B (40) although O->A->B->C costs 30.
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 0, 10);
+        TestNode b = TestNode.customer("B", 0, 20);
+        TestNode c = TestNode.customer("C", 0, 30);
+        MatrixCostCalculation calc = calc(List.of(origin, a, b, c));
+
+        TestPlan plan = new TestPlan("p", List.of(origin, c, a, b));  // O->C->A->B = 30 + 20 + 10 = 60
+        long before = calc.calculateCost(plan);
+        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
+
+        assertThat(before).isEqualTo(60);
+        assertThat(result.getNodes()).containsExactly(origin, a, b, c);
+        assertThat(tourCost(calc, result.getNodes())).isEqualTo(30);
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
+    }
+
+    @Test
+    void closedPlanReversalPinsTheDestinationLast() {
+        // With a trailing DESTINATION the endpoints are fixed and only the interior is reordered.
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 0, 10);
+        TestNode b = TestNode.customer("B", 0, 20);
+        TestNode c = TestNode.customer("C", 0, 30);
+        TestNode depot = TestNode.destination("D", 0, 40);   // beyond C, so O-A-B-C-D (40) is the unique optimum
+        MatrixCostCalculation calc = calc(List.of(origin, a, b, c, depot));
+
+        TestPlan plan = new TestPlan("p", List.of(origin, c, a, b, depot));  // 30 + 20 + 10 + 20 = 80
+        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
+
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
+        assertThat(result.getNodes().getLast()).isEqualTo(depot);
+        assertThat(result.getNodes()).containsExactly(origin, a, b, c, depot);
+        assertThat(tourCost(calc, result.getNodes())).isEqualTo(40);
+    }
+
     @ParameterizedTest
     @ValueSource(longs = {1L, 2L, 7L, 42L, 123L, 2024L, 99999L})
     void neverWorsensAndNeverBeatsOptimum(long seed) {
@@ -129,27 +168,6 @@ class TwoOptTest {
         TestPlan plan = new TestPlan("p", List.of(origin, a));
         TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
         assertThat(result.getNodes()).containsExactly(origin, a);
-    }
-
-    @Test
-    void reversalImprovesTourWhilePinningBothEndpoints() {
-        // The reversal loop's index bounds keep the FIRST and LAST nodes fixed (origin and the return/
-        // destination endpoint), reordering only the interior. This pins that endpoint-preserving behaviour.
-        TestNode origin = TestNode.origin("O", 0, 0);
-        TestNode a = TestNode.customer("A", 0, 10);
-        TestNode b = TestNode.customer("B", 0, 20);
-        TestNode c = TestNode.customer("C", 0, 30);
-        MatrixCostCalculation calc = calc(List.of(origin, a, b, c));
-
-        TestPlan plan = new TestPlan("p", List.of(origin, c, a, b));  // O->C->A->B = 30 + 20 + 10 = 60
-        long before = calc.calculateCost(plan);
-        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
-
-        assertThat(before).isEqualTo(60);
-        assertThat(result.getNodes()).containsExactly(origin, a, c, b);  // B stays last
-        assertThat(tourCost(calc, result.getNodes())).isEqualTo(40);
-        assertThat(result.getNodes().get(0)).isEqualTo(origin);
-        assertThat(result.getNodes().get(result.getNodes().size() - 1)).isEqualTo(b);
     }
 
 }

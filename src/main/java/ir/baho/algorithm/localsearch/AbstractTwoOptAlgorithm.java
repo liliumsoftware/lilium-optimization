@@ -17,9 +17,9 @@ import java.util.List;
  * (first-improvement, not best-improvement). Runs until a full pass finds no improving reversal — a local
  * optimum, not a global one. O(n²) candidate pairs per pass.
  *
- * <p>The last node is never part of a reversed segment, which is right for a closed tour (the destination
- * stays last) but means that on an <em>open</em> plan the final customer is never moved; use
- * {@link AbstractOpenTwoOptAlgorithm} for open plans.
+ * <p>The origin always stays first. A trailing {@link Nodeable.Type#DESTINATION} node also stays last; on an
+ * <em>open</em> plan (last node a customer) the final stop takes part in reversals like any other customer.
+ * {@link AbstractOpenTwoOptAlgorithm} adds relocation moves that are specific to open paths.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -39,8 +39,11 @@ public abstract class AbstractTwoOptAlgorithm<P
         }
         P bestPlan = plan;
         long bestCost = costCalculation.calculateCost(bestPlan);
+        // A destination is pinned last (the reversed segment [i, j) must end before it); an open plan's last
+        // customer is a legitimate part of a reversal, so j may then reach getCount().
+        int lastExclusive = endsWithDestination(bestPlan) ? bestPlan.getCount() - 1 : bestPlan.getCount();
         for (int i = 0; i < bestPlan.getCount(); i++) {
-            for (int j = i + 2; j < bestPlan.getCount(); j++) {
+            for (int j = i + 2; j <= lastExclusive; j++) {
                 checkCancel();
                 if (!this.supports(bestPlan, i, j)) {
                     continue;
@@ -59,8 +62,12 @@ public abstract class AbstractTwoOptAlgorithm<P
         return bestPlan;
     }
 
+    private boolean endsWithDestination(P plan) {
+        return plan.getCount() > 0 && plan.getNodes().getLast().getType() == Nodeable.Type.DESTINATION;
+    }
+
     /**
-     * The node sequence with the segment {@code [i, j)} reversed.
+     * The node sequence with the segment {@code [i, j)} reversed; {@code j} may equal {@code getCount()}.
      */
     protected List<N> calculateTwoOptSwap(P plan, int i, int j) {
         List<N> newNodes = new ArrayList<>(plan.getNodes().subList(0, i));
