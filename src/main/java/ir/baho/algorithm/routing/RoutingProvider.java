@@ -1,6 +1,5 @@
 package ir.baho.algorithm.routing;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -15,9 +14,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Thin HTTP client for an OSRM routing server. Exposes the route geometry ({@code /route/v1}), the all-pairs
@@ -31,19 +32,36 @@ import java.util.Locale;
  * {@link RoutingException}; so does a {@code null} duration or distance and a {@code null} cell of the duration table
  * (OSRM's answer for a pair it cannot route between), whose message names the pair. Failures are reported through the
  * exception only, they are not logged as errors. All calls use the {@code driving} profile. Coordinates are always
- * formatted with a {@code '.'} decimal separator regardless of the default locale, and the formatter is per-thread,
- * so instances may be shared across threads. Note a fresh {@link HttpClient} is created per call, so this is
- * convenient rather than high-throughput.
+ * formatted with a {@code '.'} decimal separator regardless of the default locale.
  *
  * <p><strong>Input validation.</strong> Every coordinate is checked before a request is built: a {@link Point} without
  * coordinates, a non-finite longitude or latitude, a longitude outside {@code [-180, 180]} or a latitude outside
  * {@code [-90, 90]} is rejected with {@link IllegalArgumentException} (a problem with the caller's input, not with the
  * routing service), so the formatter's three integer digits can never truncate a bad value into a plausible one.
+ *
+ * <p><strong>Thread-safety and lifecycle.</strong> One {@link HttpClient} is shared for the provider's lifetime
+ * (connection reuse, no per-call thread pools) and {@link HttpClient} is thread-safe, so a single instance may be
+ * used from any number of threads. {@link #close()} releases the client; it is only required when the provider
+ * owns the client (default constructor), and is a no-op for a client supplied by the caller.
+ *
+ * <p><strong>Timeouts.</strong> Every request is bounded by {@link #DEFAULT_REQUEST_TIMEOUT} (30 seconds) unless a
+ * request timeout is passed to the constructor; {@link #NO_REQUEST_TIMEOUT} switches the bound off, so a request then
+ * waits as long as the server takes. A server that does not answer in time surfaces as a {@link RoutingException}
+ * caused by {@link java.net.http.HttpTimeoutException}. A connect timeout belongs to the {@link HttpClient}, so
+ * configure it on a client you supply.
  */
-@RequiredArgsConstructor
 @Slf4j
-public class RoutingProvider {
+public class RoutingProvider implements AutoCloseable {
 
+    /**
+     * The request timeout of the constructors that take none: long enough for a large {@code /table} request, short
+     * enough that a server that never answers cannot block a planning run forever.
+     */
+    public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    /**
+     * Pass as the request timeout to wait for every answer without a bound.
+     */
+    public static final Duration NO_REQUEST_TIMEOUT = Duration.ZERO;
     /**
      * Coordinate formatter: up to 15 fraction digits, always a {@code '.'} decimal separator and no grouping,
      * whatever the JVM's default locale is. {@link DecimalFormat} is not thread-safe, so one instance per thread. The
@@ -56,6 +74,69 @@ public class RoutingProvider {
     });
     private final String routingServiceUrl;
     private final JsonMapper mapper;
+    private final HttpClient client;
+    private final boolean ownsClient;
+    private final Duration requestTimeout;
+
+    /**
+     * Creates a provider owning a default {@link HttpClient} whose requests each time out after
+     * {@link #DEFAULT_REQUEST_TIMEOUT}; call {@link #close()} when done with it.
+     *
+     * @param routingServiceUrl base URL of the OSRM server, without a trailing slash
+     * @param mapper            Jackson mapper used to parse responses
+     */
+    public RoutingProvider(String routingServiceUrl, JsonMapper mapper) {
+        this(routingServiceUrl, mapper, HttpClient.newHttpClient(), true, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    /**
+     * Creates a provider owning a default {@link HttpClient} whose requests each time out after
+     * {@code requestTimeout}; call {@link #close()} when done with it.
+     *
+     * @param routingServiceUrl base URL of the OSRM server, without a trailing slash
+     * @param mapper            Jackson mapper used to parse responses
+     * @param requestTimeout    longest time to wait for each response, or {@link #NO_REQUEST_TIMEOUT} for no bound
+     * @throws IllegalArgumentException if {@code requestTimeout} is negative
+     */
+    public RoutingProvider(String routingServiceUrl, JsonMapper mapper, Duration requestTimeout) {
+        this(routingServiceUrl, mapper, HttpClient.newHttpClient(), true, nonNegative(requestTimeout));
+    }
+
+    /**
+     * Creates a provider that sends requests through the caller's {@link HttpClient} (connect timeout, proxy,
+     * executor configured there), each timing out after {@link #DEFAULT_REQUEST_TIMEOUT}. The caller keeps ownership
+     * of the client; {@link #close()} will not close it.
+     */
+    public RoutingProvider(String routingServiceUrl, JsonMapper mapper, HttpClient client) {
+        this(routingServiceUrl, mapper, client, false, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    /**
+     * Like {@link #RoutingProvider(String, JsonMapper, HttpClient)}, with every request timing out after
+     * {@code requestTimeout} ({@link #NO_REQUEST_TIMEOUT} for no bound).
+     *
+     * @throws IllegalArgumentException if {@code requestTimeout} is negative
+     */
+    public RoutingProvider(String routingServiceUrl, JsonMapper mapper, HttpClient client, Duration requestTimeout) {
+        this(routingServiceUrl, mapper, client, false, nonNegative(requestTimeout));
+    }
+
+    private RoutingProvider(String routingServiceUrl, JsonMapper mapper, HttpClient client, boolean ownsClient,
+            Duration requestTimeout) {
+        this.routingServiceUrl = Objects.requireNonNull(routingServiceUrl, "routingServiceUrl");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.client = Objects.requireNonNull(client, "client");
+        this.ownsClient = ownsClient;
+        this.requestTimeout = requestTimeout;
+    }
+
+    private static Duration nonNegative(Duration requestTimeout) {
+        Objects.requireNonNull(requestTimeout, "requestTimeout");
+        if (requestTimeout.isNegative()) {
+            throw new IllegalArgumentException("requestTimeout must not be negative, was " + requestTimeout);
+        }
+        return requestTimeout;
+    }
 
     private static String format(double coordinate) {
         return DECIMAL_FORMAT.get().format(coordinate);
@@ -263,16 +344,33 @@ public class RoutingProvider {
         return routes.get(0);
     }
 
+    /**
+     * Closes the owned {@link HttpClient}; no-op when the client was supplied by the caller.
+     */
+    @Override
+    public void close() {
+        if (ownsClient) {
+            client.close();
+        }
+    }
+
     private String sendRequest(String url) throws RoutingException {
-        try (HttpClient client = HttpClient.newHttpClient()) {
-            HttpRequest request = HttpRequest.newBuilder().uri(new URI(url)).GET().build();
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder().uri(new URI(url)).GET();
+            if (!requestTimeout.isZero()) {
+                builder.timeout(requestTimeout);
+            }
+            HttpRequest request = builder.build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 log.debug("Routing service response {}", response.body());
                 throw new RoutingException("Routing service returned status " + response.statusCode());
             }
             return response.body();
-        } catch (IOException | URISyntaxException | InterruptedException e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RoutingException("Routing service request interrupted", e);
+        } catch (IOException | URISyntaxException e) {
             // Reported once, through the exception; logging it here as well would duplicate it in the caller's log.
             throw new RoutingException("Routing service request failed", e);
         }
