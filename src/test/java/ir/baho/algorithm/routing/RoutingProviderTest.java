@@ -8,16 +8,28 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -72,6 +84,7 @@ class RoutingProviderTest {
 
     @AfterEach
     void stopFakeOsrm() {
+        provider.close();
         server.stop(0);
     }
 
@@ -264,6 +277,45 @@ class RoutingProviderTest {
     }
 
     @Test
+    void aRequestTimeoutBoundsTheWaitForASlowServer() {
+        responseBody.set("{\"routes\":[{\"duration\":1}]}");
+        responseDelayMillis.set(1_500);
+        try (RoutingProvider bounded = new RoutingProvider(baseUrl(), JsonMapper.builder().build(),
+                Duration.ofMillis(200))) {
+            long start = System.nanoTime();
+            assertThatThrownBy(() -> bounded.getDuration(List.of(new Point(4.4, 52.2), new Point(4.9, 52.4))))
+                    .isInstanceOf(RoutingException.class)
+                    .hasCauseInstanceOf(HttpTimeoutException.class);
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(1_200));
+        }
+    }
+
+    @Test
+    void aSlowAnswerWithinTheDefaultTimeoutIsAwaited() {
+        responseBody.set("{\"routes\":[{\"duration\":1}]}");
+        responseDelayMillis.set(300);
+
+        assertThat(provider.getDuration(List.of(new Point(4.4, 52.2), new Point(4.9, 52.4)))).isEqualTo(1000);
+    }
+
+    @Test
+    void theConstructorsWithoutATimeoutBoundEveryRequestByTheDefaultTimeout() {
+        // Without a timeout a request against a server that never answers blocked forever.
+        responseBody.set("{\"routes\":[{\"distance\":7}]}");
+        try (HttpClient own = HttpClient.newHttpClient()) {
+            RecordingClient recording = new RecordingClient(own);
+            new RoutingProvider(baseUrl(), JsonMapper.builder().build(), recording).getDistance(List.of(new Point(1.0,
+                    2.0)));
+            new RoutingProvider(baseUrl(), JsonMapper.builder().build(), recording, Duration.ofSeconds(5))
+                    .getDistance(List.of(new Point(1.0, 2.0)));
+
+            assertThat(RoutingProvider.DEFAULT_REQUEST_TIMEOUT).isEqualTo(Duration.ofSeconds(30));
+            assertThat(recording.timeouts).containsExactly(Optional.of(Duration.ofSeconds(30)),
+                    Optional.of(Duration.ofSeconds(5)));
+        }
+    }
+
+    @Test
     void invalidCoordinatesAreRejectedBeforeAnyRequestIsSent() {
         // NaN and infinity were formatted into the URL as "NaN" / "∞", and a longitude of 1234.5 was silently
         // truncated to 234.5 by the three-integer-digit formatter.
@@ -326,6 +378,26 @@ class RoutingProviderTest {
     }
 
     @Test
+    // every constructor call below must throw before a provider exists
+    @SuppressWarnings("resource")
+    void aNegativeRequestTimeoutIsRejectedAndZeroSwitchesTheBoundOff() {
+        JsonMapper mapper = JsonMapper.builder().build();
+        assertThatThrownBy(() -> new RoutingProvider(baseUrl(), mapper, Duration.ofSeconds(-1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        try (HttpClient own = HttpClient.newHttpClient()) {
+            assertThatThrownBy(() -> new RoutingProvider(baseUrl(), mapper, own, Duration.ofSeconds(-1)))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> new RoutingProvider(baseUrl(), mapper, (Duration) null))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(RoutingProvider.NO_REQUEST_TIMEOUT).isEqualTo(Duration.ZERO);
+    }
+
+    private String baseUrl() {
+        return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    @Test
     void aNullRouteGeometryIsARoutingExceptionNotANullResult() {
         responseBody.set("{\"routes\":[{\"geometry\":null}]}");
 
@@ -347,6 +419,20 @@ class RoutingProviderTest {
         responseBody.set("{\"durations\":[[0,\"x\"],[1,0]]}");
         assertThatThrownBy(() -> provider.getCostMatrix(points)).isInstanceOf(RoutingException.class)
                 .hasMessageContaining("not a number");
+    }
+
+    @Test
+    void noRequestTimeoutSwitchesTheBoundOffAndWaitsForASlowServer() {
+        responseBody.set("{\"routes\":[{\"distance\":7}]}");
+        responseDelayMillis.set(300);
+        try (HttpClient own = HttpClient.newHttpClient()) {
+            RecordingClient recording = new RecordingClient(own);
+            RoutingProvider unbounded = new RoutingProvider(baseUrl(), JsonMapper.builder().build(), recording,
+                    RoutingProvider.NO_REQUEST_TIMEOUT);
+
+            assertThat(unbounded.getDistance(List.of(new Point(1.0, 2.0)))).isEqualTo(7);
+            assertThat(recording.timeouts).containsExactly(Optional.empty());
+        }
     }
 
     @Test
@@ -407,6 +493,117 @@ class RoutingProviderTest {
         assertThatThrownBy(() -> provider.getDistance(List.of(new Point(1.0, 2.0))))
                 .isInstanceOf(RoutingException.class)
                 .hasMessageContaining("distance");
+    }
+
+    @Test
+    void aCallerSuppliedHttpClientIsUsedAndNotClosedByTheProvider() throws Exception {
+        responseBody.set("{\"routes\":[{\"distance\":7}]}");
+        try (HttpClient own = HttpClient.newHttpClient()) {
+            RoutingProvider shared = new RoutingProvider("http://127.0.0.1:" + server.getAddress().getPort(),
+                    JsonMapper.builder().build(), own);
+
+            assertThat(shared.getDistance(List.of(new Point(1.0, 2.0)))).isEqualTo(7);
+            shared.close();   // must not close the caller's client ...
+
+            // ... which therefore still works afterwards.
+            HttpRequest probe = HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:"
+                    + server.getAddress().getPort() + "/probe")).GET().build();
+            assertThat(own.send(probe, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void oneProviderServesManySequentialRequestsOverItsSingleClient() {
+        responseBody.set("{\"routes\":[{\"distance\":1}]}");
+        for (int i = 0; i < 50; i++) {
+            assertThat(provider.getDistance(List.of(new Point(1.0 + i, 2.0)))).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void closingTheOwnedClientTwiceIsHarmless() {
+        provider.close();
+        provider.close();
+    }
+
+    /**
+     * Delegates to a real client and records the timeout of every request it is asked to send.
+     */
+    private static final class RecordingClient extends HttpClient {
+
+        private final HttpClient delegate;
+        private final List<Optional<Duration>> timeouts = Collections.synchronizedList(new ArrayList<>());
+
+        private RecordingClient(HttpClient delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return delegate.cookieHandler();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return delegate.connectTimeout();
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return delegate.followRedirects();
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return delegate.proxy();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return delegate.sslContext();
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return delegate.sslParameters();
+        }
+
+        @Override
+        public Optional<Authenticator> authenticator() {
+            return delegate.authenticator();
+        }
+
+        @Override
+        public Version version() {
+            return delegate.version();
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return delegate.executor();
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+                throws IOException, InterruptedException {
+            timeouts.add(request.timeout());
+            return delegate.send(request, handler);
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                HttpResponse.BodyHandler<T> handler) {
+            timeouts.add(request.timeout());
+            return delegate.sendAsync(request, handler);
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                HttpResponse.BodyHandler<T> handler,
+                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            timeouts.add(request.timeout());
+            return delegate.sendAsync(request, handler, pushPromiseHandler);
+        }
     }
 
 }
