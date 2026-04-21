@@ -33,7 +33,7 @@ public abstract class SecondDispatchTrackableAssignment<P
      * each unit once even when a first and a second run both hold it) plus unused ones, keeping only those that
      * support a second dispatch. Plans without a trackable contribute nothing.
      */
-    public void secondDispatchOnly(List<P> plans) {
+    public synchronized void secondDispatchOnly(List<P> plans) {
         List<T> plannedTrackables = plans.stream().filter(p -> p.getTrackable() != null)
                 .map(this::getTrackableForSecondDispatch).distinct().toList();
         List<T> allTrackables = currentTrackables.stream().filter(t -> !plannedTrackables.contains(t))
@@ -48,7 +48,7 @@ public abstract class SecondDispatchTrackableAssignment<P
      * resources not yet used plus those eligible for a second run, and returns the second-run plans together with
      * {@code secondDispatch}. Every plan in {@code plans} must already have a trackable assigned.
      */
-    public List<P> secondDispatchAndOthers(List<P> plans, List<P> secondDispatch) {
+    public synchronized List<P> secondDispatchAndOthers(List<P> plans, List<P> secondDispatch) {
         List<T> secondDispatchTrackables = plans.stream()
                 .filter(p -> p.isSecondDispatch())
                 .map(P::getTrackable)

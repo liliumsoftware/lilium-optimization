@@ -29,8 +29,11 @@ import java.util.Set;
  * <p>Composite algorithms that own nested algorithms override {@link #cancel()} and {@link #interrupt()} to propagate
  * the signals. Note {@link #checkCancel()} also treats a pending thread interrupt as a cancel; the thread's interrupt
  * status is left set, so code further up the stack still sees it. Both signals are safe to raise from a different
- * thread than the one running the algorithm; instances are otherwise not thread-safe and must not run
- * concurrently.
+ * thread than the one running the algorithm.
+ *
+ * <p><strong>Thread-safety.</strong> Algorithm instances hold only immutable configuration plus these two flags, so
+ * one instance may run concurrently on independent plan lists. The flags are shared, however: {@link #cancel()} or
+ * {@link #interrupt()} stops <em>every</em> run in progress on that instance, and neither flag is ever reset.
  */
 public abstract class BaseAlgorithm {
 

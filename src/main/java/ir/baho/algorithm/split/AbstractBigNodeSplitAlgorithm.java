@@ -27,13 +27,14 @@ public abstract class AbstractBigNodeSplitAlgorithm<P
     protected final List<T> trackables;
 
     @Getter
-    protected final List<P> singleNodePlans = new ArrayList<>();
+    protected final List<P> singleNodePlans = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * Rewrites {@code nodes} in place (the list must be mutable), appending remainders, and records one single-node
-     * plan per carved chunk in {@code getSingleNodePlans()}, which accumulates across calls.
+     * plan per carved chunk in {@code getSingleNodePlans()}, which accumulates across calls. Synchronized because
+     * the accumulated plans are instance state.
      */
-    public List<N> split(List<N> nodes) {
+    public synchronized List<N> split(List<N> nodes) {
         List<T> sortedTrackables = trackables.stream().sorted(this.comparator()).collect(Collectors.toList());
         Collections.reverse(sortedTrackables);
         for (int i = 0; i < nodes.size(); i++) {
