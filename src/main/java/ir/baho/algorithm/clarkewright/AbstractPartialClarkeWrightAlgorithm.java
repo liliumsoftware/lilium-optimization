@@ -10,9 +10,12 @@ import ir.baho.algorithm.localsearch.LocalSearchAlgorithm;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +33,8 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     /**
      * The restricted pool of the {@link #apply} call running on the current thread. Thread-local rather than an
      * instance field so that independent {@code apply} calls on a shared instance cannot see each other's pool.
+     * The λ/β sweep runs on parallel-stream worker threads that do not see this thread-local, so
+     * {@link #getPlans} reads the pool once on the calling thread and hands it to each worker explicitly.
      */
     private final ThreadLocal<List<T>> trackables = new ThreadLocal<>();
 
@@ -134,8 +139,36 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
         return plans;
     }
 
+    /**
+     * Same grid as the parent, but every worker merges against the pool captured on the calling thread.
+     */
+    @Override
+    protected List<PlanList<P>> getPlans(N origin, List<N> customers, List<P> plans) {
+        List<T> pool = partialTrackables();
+        Function<N, N> routeStarts = getRouteStarts(origin, plans);
+        Function<N, N> routeEnds = getRouteEnds(origin, plans);
+        if (betas.isEmpty()) {
+            return lambdas.parallelStream().map(l -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
+                            .collect(Collectors.toList()),
+                    getSavings(origin, customers, routeStarts, routeEnds, l, 0), pool), new LambdaBeta(l))).toList();
+        }
+        Map<LambdaBeta, List<Saving>> savings = new HashMap<>();
+        lambdas.forEach(l -> betas.forEach(b -> savings.put(new LambdaBeta(l, b), getSavings(origin, customers,
+                routeStarts, routeEnds, l, b))));
+        return savings.entrySet().parallelStream().map(s -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
+                        .collect(Collectors.toList()),
+                s.getValue(), pool), s.getKey())).collect(Collectors.toList());
+    }
+
     @Override
     protected List<P> mergePlans(List<P> plans, List<Saving> savings) {
+        return mergePlans(plans, savings, partialTrackables());
+    }
+
+    /**
+     * The parent's greedy merge, assigning only from {@code pool}.
+     */
+    protected List<P> mergePlans(List<P> plans, List<Saving> savings, List<T> pool) {
         List<N> customers;
         // Walk the list once instead of removing its head each time: on an ArrayList every head removal shifts all
         // remaining savings, which made this loop quadratic in the number of savings.
@@ -180,7 +213,7 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
                 List<P> tempPlans = new PlanMerger<>(plans, firstPlan, secondPlan, newPlan).merge();
                 List<P> mergedPlans = tempPlans.stream()
                         .filter(p -> p.getTrackable() != null || p.equals(newPlan)).collect(Collectors.toList());
-                boolean result = trackableAssignment.assignWithTrackables(mergedPlans, this.partialTrackables());
+                boolean result = trackableAssignment.assignWithTrackables(mergedPlans, pool);
                 if (result) {
                     plans.clear();
                     mergedPlans.replaceAll(localSearchAlgorithm::apply);
@@ -197,7 +230,7 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
         List<P> finalPlans = plans.stream().filter(p -> p.getTrackable() != null).collect(Collectors.toList());
         for (P plan : plans.stream().filter(p -> p.getTrackable() == null).sorted(planComparator()).toList()) {
             checkCancel();
-            if (trackableAssignment.assignWithTrackables(finalPlans, plan, this.partialTrackables())) {
+            if (trackableAssignment.assignWithTrackables(finalPlans, plan, pool)) {
                 finalPlans.add(plan);
             } else {
                 log.trace("Trackable assignment failed");
