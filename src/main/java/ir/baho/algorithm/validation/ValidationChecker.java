@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -16,8 +17,9 @@ import java.util.function.Consumer;
  * valid; otherwise it is converted to an {@link InvalidNodeable} carrying its causes.
  *
  * <p>Stateful by design: each {@link #validate(List)} replaces the partition returned by the getters. The method
- * is synchronized and the fields volatile, so a shared instance never exposes a half-built partition, but callers
- * that need several partitions at once should use one instance per run.
+ * is synchronized, the partition is built completely before it is published through volatile fields, and the
+ * published lists are unmodifiable, so a shared instance never exposes a half-built or externally mutated
+ * partition. Callers that need several partitions at once should still use one instance per run.
  *
  * @param <N> the input node type
  * @param <I> the invalid-node type produced for rejected nodes
@@ -44,8 +46,8 @@ public abstract class ValidationChecker<N extends Nodeable<N>, I extends Invalid
                 invalid.add(toInvalidNode(node, results));
             }
         }
-        validNodes = valid;
-        invalidNodes = invalid;
+        validNodes = Collections.unmodifiableList(valid);
+        invalidNodes = Collections.unmodifiableList(invalid);
     }
 
     /**

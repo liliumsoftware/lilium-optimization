@@ -5,9 +5,11 @@ import ir.baho.algorithm.support.TestNode;
 import ir.baho.algorithm.support.TestValidation;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Validation runs once, before planning, precisely so that structurally unplannable customers never reach the
@@ -91,6 +93,23 @@ class ValidationCheckerTest {
 
         assertThat(fresh.getValidNodes()).isNull();
         assertThat(fresh.getInvalidNodes()).isNull();
+    }
+
+    @Test
+    void publishedPartitionsAreUnmodifiableSnapshots() {
+        TestValidation checker = new TestValidation();
+        checker.validate(new ArrayList<>(List.of(TestNode.customer("A", 0, 1, 1), TestNode.customer("B", 0, 2, 1))));
+        List<TestNode> valid = checker.getValidNodes();
+
+        assertThatThrownBy(() -> valid.add(TestNode.customer("C", 0, 3, 1)))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> checker.getInvalidNodes().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        // A later validate() publishes a new partition; the earlier snapshot is untouched.
+        checker.validate(List.of(TestNode.customer("C", 0, 3, 1)));
+        assertThat(valid).extracting(TestNode::getCode).containsExactly("A", "B");
+        assertThat(checker.getValidNodes()).extracting(TestNode::getCode).containsExactly("C");
     }
 
 }
