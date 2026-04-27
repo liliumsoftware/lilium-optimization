@@ -237,4 +237,62 @@ class PartialClarkeWrightTest {
                 .isEqualTo(partial(calculation, secondAssignment).apply(origin, customers(), secondPlans));
     }
 
+    @Test
+    void oneInstanceMayRunConcurrentlyOnIndependentInputs() throws Exception {
+        // Regression: the restricted pool was an instance field, so concurrent apply() calls on a shared instance
+        // could plan against each other's pool. Each run below must equal the sequential result exactly.
+        MatrixCostCalculation calculation = calculation();
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("T1", 4), new TestTrackable("T2", 4), new TestTrackable("T3", 4)));
+        TestPartialClarkeWright shared = partial(calculation, assignment);
+        java.util.function.Supplier<List<TestPlan>> input = () -> {
+            List<TestPlan> plans = new ArrayList<>(List.of(new TestPlan("p1", List.of(origin, a, b))));
+            assertThat(assignment.assign(plans)).isTrue();
+            return plans;
+        };
+        List<TestPlan> expected = shared.apply(origin, customers(), input.get());
+
+        int runs = 8;
+        List<java.util.concurrent.Future<List<TestPlan>>> futures = new ArrayList<>();
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        try (java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(runs)) {
+            for (int i = 0; i < runs; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return shared.apply(origin, customers(), input.get());
+                }));
+            }
+            start.countDown();
+            for (java.util.concurrent.Future<List<TestPlan>> future : futures) {
+                List<TestPlan> result = future.get(1, java.util.concurrent.TimeUnit.MINUTES);
+                assertThat(result).isEqualTo(expected);
+                PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, customers());
+                PlanInvariants.assertTrackablesAreDistinct(result);
+            }
+        }
+    }
+
+    @Test
+    void theRestrictedPoolIsHonouredInsideTheParallelParameterSweep() {
+        // Regression: the pool was looked up per thread, and the lambda/beta sweep runs on parallel-stream workers
+        // that could not see it, so those workers fell back to the full fleet and could double-book a vehicle.
+        MatrixCostCalculation calculation = calculation();
+        TestAssignment assignment = new TestAssignment(List.of(
+                new TestTrackable("T1", 4), new TestTrackable("T2", 4), new TestTrackable("T3", 4)));
+        TestPartialClarkeWright swept = new TestPartialClarkeWright(calculation, assignment,
+                new RecostingLocalSearch(calculation), null, OptimizationType.NO_RESTRICTION,
+                List.of(0.5, 1.0, 1.5, 2.0), List.of(0.25, 0.5, 0.75));
+        for (int round = 0; round < 20; round++) {
+            List<TestPlan> plans = new ArrayList<>(List.of(new TestPlan("p1", List.of(origin, a, b))));
+            assertThat(assignment.assign(plans)).isTrue();
+
+            List<TestPlan> result = swept.apply(origin, customers(), plans);
+
+            PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, customers());
+            PlanInvariants.assertEveryPlanHasTrackable(result);
+            PlanInvariants.assertTrackablesAreDistinct(result);
+            PlanInvariants.assertCustomerCountWithinCapacity(result);
+        }
+    }
+
 }

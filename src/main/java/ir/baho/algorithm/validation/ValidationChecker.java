@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -15,6 +16,11 @@ import java.util.function.Consumer;
  * than repeatedly rejected inside the hot search loops. A node accumulating no {@link ValidationResult}s is
  * valid; otherwise it is converted to an {@link InvalidNodeable} carrying its causes.
  *
+ * <p>Stateful by design: each {@link #validate(List)} replaces the partition returned by the getters. The method
+ * is synchronized, the partition is built completely before it is published through volatile fields, and the
+ * published lists are unmodifiable, so a shared instance never exposes a half-built or externally mutated
+ * partition. Callers that need several partitions at once should still use one instance per run.
+ *
  * @param <N> the input node type
  * @param <I> the invalid-node type produced for rejected nodes
  */
@@ -22,24 +28,26 @@ import java.util.function.Consumer;
 @Getter
 public abstract class ValidationChecker<N extends Nodeable<N>, I extends InvalidNodeable<I>> {
 
-    private List<N> validNodes;
-    private List<I> invalidNodes;
+    private volatile List<N> validNodes;
+    private volatile List<I> invalidNodes;
 
     /**
      * Runs {@link #validate(Nodeable, Consumer)} over every node, populating the valid/invalid partitions.
      */
-    public void validate(List<N> nodes) {
-        validNodes = new ArrayList<>();
-        invalidNodes = new ArrayList<>();
+    public synchronized void validate(List<N> nodes) {
+        List<N> valid = new ArrayList<>();
+        List<I> invalid = new ArrayList<>();
         for (N node : nodes) {
             List<ValidationResult> results = new ArrayList<>();
             validate(node, results::add);
             if (results.isEmpty()) {
-                validNodes.add(node);
+                valid.add(node);
             } else {
-                invalidNodes.add(toInvalidNode(node, results));
+                invalid.add(toInvalidNode(node, results));
             }
         }
+        validNodes = Collections.unmodifiableList(valid);
+        invalidNodes = Collections.unmodifiableList(invalid);
     }
 
     /**

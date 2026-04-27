@@ -26,11 +26,14 @@ import java.util.stream.IntStream;
  * are repaired alike; every accepted move also counts against a cap, so an overridden {@code compare…} hook that
  * accepts ties cannot loop forever.
  *
- * <p><strong>Concurrency.</strong> {@link #assign(List, List)} is {@code synchronized} because callers may hand it
- * overlapping plan sets. The library's zone-group entry points (see {@code ZoneGroups}) first run the groups in
- * parallel, each limited by {@link #withoutIdleUnits} to the units its own plans hold, so the groups never compete
- * for a unit; a second, ordered pass then lets each group that wanted one ({@link #wantedIdleUnits}) use the idle
- * units the earlier groups left.
+ * <p><strong>Concurrency.</strong> The {@code assign…} methods only read {@code currentTrackables} (into a private
+ * working copy) and otherwise touch nothing but their arguments, so they may run concurrently on independent plan
+ * sets. {@link #assign(List, List)} is additionally {@code synchronized} because callers may hand it overlapping plan
+ * sets. The library's zone-group entry points (see {@code ZoneGroups}) first run the groups in parallel, each limited
+ * by {@link #withoutIdleUnits} to the units its own plans hold, so the groups never compete for a unit; a second,
+ * ordered pass then lets each group that wanted one ({@link #wantedIdleUnits}) use the idle units the earlier groups
+ * left. The pool itself is replaced only by the second-dispatch variant, whose mutators are synchronized and must not
+ * race with in-flight assignments; the field is {@code volatile} so a replaced pool is seen by every thread.
  *
  * @param <T> the resource type being assigned
  */
@@ -45,7 +48,7 @@ public abstract class TrackableAssignment<P extends Planable<P, ?, T>, T extends
 
     @Getter
     protected final List<T> trackables;
-    protected List<T> currentTrackables;
+    protected volatile List<T> currentTrackables;
 
     /**
      * Expands each resource into {@link Trackable#getCount()} indexed copies ({@code setIndex(0 .. count-1)}) and

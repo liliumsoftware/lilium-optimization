@@ -10,9 +10,12 @@ import ir.baho.algorithm.localsearch.LocalSearchAlgorithm;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -27,7 +30,13 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
         T extends Trackable<T>> extends AbstractClarkeWrightAlgorithm<P, N> {
 
     private final TrackableAssignment<P, T> trackableAssignment;
-    private List<T> trackables;
+    /**
+     * The restricted pool of the {@link #apply} call running on the current thread. Thread-local rather than an
+     * instance field so that independent {@code apply} calls on a shared instance cannot see each other's pool.
+     * The λ/β sweep runs on parallel-stream worker threads that do not see this thread-local, so
+     * {@link #getPlans} reads the pool once on the calling thread and hands it to each worker explicitly.
+     */
+    private final ThreadLocal<List<T>> trackables = new ThreadLocal<>();
 
     /**
      * Zone-restricted variant with the classic saving; see the parent constructors for the parameters.
@@ -76,15 +85,24 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
 
     /**
      * Consolidates work onto fewer resources: repeatedly hands a plan's trackable over to a spare one and re-plans
-     * the customers not yet covered against the remaining pool. Mutates and returns {@code plans}. {@code cancel()}
-     * aborts with a {@link ir.baho.algorithm.exception.CancelException}; {@code interrupt()}
-     * stops further hand-overs and returns the plans as they are (the re-planning itself, being construction, always
-     * completes). Plans without a resource are carried along unchanged.
+     * the customers not yet covered against the remaining pool. Mutates and returns {@code plans}. Safe to call
+     * concurrently on one instance with independent inputs. {@code cancel()} aborts with a
+     * {@link ir.baho.algorithm.exception.CancelException}; {@code interrupt()} stops further
+     * hand-overs and returns the plans as they are (the re-planning itself, being construction, always completes).
+     * Plans without a resource are carried along unchanged.
      *
      * @throws IllegalArgumentException if two customers share a code
      */
     public List<P> apply(N origin, List<N> customers, List<P> plans) {
         requireDistinctCodes(customers);
+        try {
+            return doApply(origin, customers, plans);
+        } finally {
+            this.trackables.remove();
+        }
+    }
+
+    private List<P> doApply(N origin, List<N> customers, List<P> plans) {
         List<T> trackables = trackableAssignment.getTrackables();
         for (int i = 0; i < trackables.size(); i++) {
             int index = i;
@@ -104,8 +122,8 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
                 T freeTrackable = trackables.get(j);
                 if (plan.isPresent() && tempPlans.stream().noneMatch(p -> freeTrackable.equals(p.getTrackable()))
                         && trackableAssignment.assignWithTrackable(plan.get(), freeTrackable)) {
-                    this.trackables = trackables.stream().filter(t -> tempPlans.stream()
-                            .noneMatch(p -> t.equals(p.getTrackable()))).collect(Collectors.toList());
+                    this.trackables.set(trackables.stream().filter(t -> tempPlans.stream()
+                            .noneMatch(p -> t.equals(p.getTrackable()))).collect(Collectors.toList()));
                     List<P> newPlans = plan(origin, getUnplannedNodes(tempPlans, customers));
                     if (!newPlans.isEmpty()) {
                         plans.clear();
@@ -121,8 +139,36 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
         return plans;
     }
 
+    /**
+     * Same grid as the parent, but every worker merges against the pool captured on the calling thread.
+     */
+    @Override
+    protected List<PlanList<P>> getPlans(N origin, List<N> customers, List<P> plans) {
+        List<T> pool = partialTrackables();
+        Function<N, N> routeStarts = getRouteStarts(origin, plans);
+        Function<N, N> routeEnds = getRouteEnds(origin, plans);
+        if (betas.isEmpty()) {
+            return lambdas.parallelStream().map(l -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
+                            .collect(Collectors.toList()),
+                    getSavings(origin, customers, routeStarts, routeEnds, l, 0), pool), new LambdaBeta(l))).toList();
+        }
+        Map<LambdaBeta, List<Saving>> savings = new HashMap<>();
+        lambdas.forEach(l -> betas.forEach(b -> savings.put(new LambdaBeta(l, b), getSavings(origin, customers,
+                routeStarts, routeEnds, l, b))));
+        return savings.entrySet().parallelStream().map(s -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
+                        .collect(Collectors.toList()),
+                s.getValue(), pool), s.getKey())).collect(Collectors.toList());
+    }
+
     @Override
     protected List<P> mergePlans(List<P> plans, List<Saving> savings) {
+        return mergePlans(plans, savings, partialTrackables());
+    }
+
+    /**
+     * The parent's greedy merge, assigning only from {@code pool}.
+     */
+    protected List<P> mergePlans(List<P> plans, List<Saving> savings, List<T> pool) {
         List<N> customers;
         // Walk the list once instead of removing its head each time: on an ArrayList every head removal shifts all
         // remaining savings, which made this loop quadratic in the number of savings.
@@ -167,7 +213,7 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
                 List<P> tempPlans = new PlanMerger<>(plans, firstPlan, secondPlan, newPlan).merge();
                 List<P> mergedPlans = tempPlans.stream()
                         .filter(p -> p.getTrackable() != null || p.equals(newPlan)).collect(Collectors.toList());
-                boolean result = trackableAssignment.assignWithTrackables(mergedPlans, this.partialTrackables());
+                boolean result = trackableAssignment.assignWithTrackables(mergedPlans, pool);
                 if (result) {
                     plans.clear();
                     mergedPlans.replaceAll(localSearchAlgorithm::apply);
@@ -184,7 +230,7 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
         List<P> finalPlans = plans.stream().filter(p -> p.getTrackable() != null).collect(Collectors.toList());
         for (P plan : plans.stream().filter(p -> p.getTrackable() == null).sorted(planComparator()).toList()) {
             checkCancel();
-            if (trackableAssignment.assignWithTrackables(finalPlans, plan, this.partialTrackables())) {
+            if (trackableAssignment.assignWithTrackables(finalPlans, plan, pool)) {
                 finalPlans.add(plan);
             } else {
                 log.trace("Trackable assignment failed");
@@ -201,7 +247,8 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
      * a standalone {@code plan(...)} would dereference the not-yet-assigned pool.
      */
     protected List<T> partialTrackables() {
-        return trackables == null ? trackableAssignment.getTrackables() : trackables;
+        List<T> pool = trackables.get();
+        return pool == null ? trackableAssignment.getTrackables() : pool;
     }
 
     /**

@@ -3,7 +3,6 @@ package ir.baho.algorithm.split;
 import ir.baho.algorithm.domain.Nodeable;
 import ir.baho.algorithm.domain.Planable;
 import ir.baho.algorithm.domain.Trackable;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,14 +25,22 @@ public abstract class AbstractBigNodeSplitAlgorithm<P
 
     protected final List<T> trackables;
 
-    @Getter
     protected final List<P> singleNodePlans = new ArrayList<>();
 
     /**
-     * Rewrites {@code nodes} in place (the list must be mutable), appending remainders, and records one single-node
-     * plan per carved chunk in {@code getSingleNodePlans()}, which accumulates across calls.
+     * Snapshot of every single-node plan emitted so far by {@link #split(List)} on this instance (accumulates
+     * across calls); the returned list is an independent, unmodifiable copy.
      */
-    public List<N> split(List<N> nodes) {
+    public synchronized List<P> getSingleNodePlans() {
+        return List.copyOf(singleNodePlans);
+    }
+
+    /**
+     * Rewrites {@code nodes} in place (the list must be mutable), appending remainders, and records one single-node
+     * plan per carved chunk in {@code getSingleNodePlans()}, which accumulates across calls. Synchronized because
+     * the accumulated plans are instance state.
+     */
+    public synchronized List<N> split(List<N> nodes) {
         List<T> sortedTrackables = trackables.stream().sorted(this.comparator()).collect(Collectors.toList());
         Collections.reverse(sortedTrackables);
         for (int i = 0; i < nodes.size(); i++) {
