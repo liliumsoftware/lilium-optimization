@@ -423,4 +423,48 @@ class BalanceAlgorithmTest {
         assertThat(result).extracting(TestPlan::getCode).containsExactly("C", "A", "B");
     }
 
+    @Test
+    void aTransferThatLowersTheTotalShortfallIsAdmittedEvenWhenTheDonorDropsBelowTheFloor() {
+        // Floor 6: the donor holds demands 5 and 2, the receiver nothing. Moving either customer lowers the total
+        // shortfall from 6 to 5 (donor 2 -> 4 short, receiver 5 -> 1 short), yet a rule that required the donor to
+        // stay at the floor refused both and returned the input unchanged.
+        TestNode heavy = TestNode.customer("H", 10, 0, 5);
+        TestNode light = TestNode.customer("L", 20, 0, 2);
+        MatrixCostCalculation calculation = calculation(List.of(heavy, light));
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("donor-t", 9),
+                new TestTrackable("receiver-t", 9)));
+        List<TestPlan> plans = new ArrayList<>(List.of(plan("donor", List.of(heavy, light), 9), plan("receiver",
+                List.of(), 9)));
+
+        List<TestPlan> result = new TestCapacityBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 6).apply(plans);
+
+        assertThat(result).extracting(DemandFeasibilityChecker::load).containsExactlyInAnyOrder(2L, 5L);
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(heavy, light));
+        PlanInvariants.assertTrackablesAreDistinct(result);
+    }
+
+    @Test
+    void amongTheCandidateTransfersTheCheapestResultingPlanSetIsKept() {
+        // Regression: the balancer used to keep the MOST expensive candidate set. Big plan O-A-B-C (C far out on
+        // the x axis), small plan O-D. Moving A gives 170, B gives 160, C gives 140 in total; C must be chosen.
+        TestNode a = TestNode.customer("A", 0, 10, 1);
+        TestNode b = TestNode.customer("B", 0, 20, 1);
+        TestNode c = TestNode.customer("C", 100, 0, 1);
+        TestNode d = TestNode.customer("D", 0, -10, 1);
+        MatrixCostCalculation calculation = calculation(List.of(a, b, c, d));
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("big-t", 5),
+                new TestTrackable("small-t", 5)));
+        List<TestPlan> plans = new ArrayList<>(List.of(plan("big", List.of(a, b, c), 5), plan("small", List.of(d), 5)));
+        assertThat(PlanInvariants.referenceTotalCost(plans)).isEqualTo(10 + 10 + 120 + 10);
+
+        List<TestPlan> result = new TestNodeBalance(calculation, assignment,
+                new TestInsertion(calculation, new AlwaysFeasibleChecker(), false), 2).apply(plans);
+
+        assertThat(PlanInvariants.referenceTotalCost(result)).isEqualTo(140);
+        assertThat(result).anySatisfy(plan -> assertThat(plan.getCustomers()).containsExactlyInAnyOrder(c, d));
+        assertThat(result).anySatisfy(plan -> assertThat(plan.getCustomers()).containsExactlyInAnyOrder(a, b));
+        PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(a, b, c, d));
+    }
+
 }

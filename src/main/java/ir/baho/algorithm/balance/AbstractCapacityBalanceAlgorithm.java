@@ -20,10 +20,10 @@ import java.util.stream.Collectors;
  * re-assigned, strictly shrinks; so customers never bounce between plans below the floor, a donor may itself drop
  * below the floor when that still reduces the total shortfall, and the loop terminates even when
  * {@link #getCapacity(Planable)} depends on the assigned resource. Among the admissible single-customer transfers it
- * keeps the one whose resulting plan set has the <em>highest</em> total cost ({@code max} under
- * {@link #plansComparator()}, as historically implemented), then repeats until every plan meets the floor or no
- * admissible transfer is assignable, and returns the best state seen (smallest shortfall, then cheapest). Plans are
- * located by position and customers by code, never by {@code equals};
+ * keeps the one whose resulting plan set is <em>cheapest</em> ({@code min} under {@link #plansComparator()}), then
+ * repeats until every plan meets the floor or no admissible transfer is assignable, and returns the best state seen
+ * (smallest shortfall, then cheapest). Balancing still trades cost for evenness; this choice only makes each step the
+ * least expensive way to do so. Plans are located by position and customers by code, never by {@code equals};
  * {@code cancel()} and {@code interrupt()} are honoured between transfers and forwarded to the insertion algorithm.
  */
 @Slf4j
@@ -108,7 +108,7 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
             }
             if (!candidates.isEmpty()) {
                 log.debug(getMessage(minPlan));
-                return candidates.stream().max(plansComparator()).orElseThrow(IllegalStateException::new);
+                return candidates.stream().min(plansComparator()).orElseThrow(IllegalStateException::new);
             }
         }
         return null;

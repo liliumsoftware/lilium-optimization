@@ -18,10 +18,10 @@ import java.util.stream.Collectors;
  * {@code threshold}, it moves a neighbouring customer into the smallest plan (via cheapest insertion) and out
  * of its current one. Only a plan with at least two customers more than the receiving plan may donate, so every
  * transfer strictly evens the load out (customers never bounce between small plans). Among the feasible transfers it
- * keeps the one whose resulting plan set has the <em>highest</em> total cost ({@code max} under
- * {@link #plansComparator()}, as historically implemented). Iterates until the spread is below the threshold or no
- * admissible transfer is left, and returns the best state seen (smallest spread, then cheapest). Plans are located by
- * position and customers by code, never by {@code equals};
+ * keeps the one whose resulting plan set is <em>cheapest</em> ({@code min} under {@link #plansComparator()}). Iterates
+ * until the spread is below the threshold or no admissible transfer is left, and returns the best state seen (smallest
+ * spread, then cheapest). Balancing still trades cost for evenness; this choice only makes each step the least
+ * expensive way to do so. Plans are located by position and customers by code, never by {@code equals};
  * {@code cancel()} and {@code interrupt()} are honoured between transfers and forwarded to the insertion algorithm.
  */
 @Slf4j
@@ -109,7 +109,7 @@ public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, 
             }
             if (!candidates.isEmpty()) {
                 log.debug(getMessage(minPlan));
-                return candidates.stream().max(plansComparator()).orElseThrow(IllegalStateException::new);
+                return candidates.stream().min(plansComparator()).orElseThrow(IllegalStateException::new);
             }
         }
         return null;

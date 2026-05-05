@@ -99,7 +99,7 @@ public abstract class AbstractBalanceAlgorithm<P
     }
 
     /**
-     * Orders candidate plan sets by total cost; {@link #doOperation} keeps the maximum.
+     * Orders candidate plan sets by ascending total cost; {@link #doOperation} keeps the minimum.
      */
     protected Comparator<List<P>> plansComparator() {
         return Comparator.comparingLong(CostCalculation::totalCost);
