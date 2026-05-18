@@ -1,4 +1,4 @@
-# baho-algorithm
+# lilium-optimization
 
 Vehicle-routing and plan-optimization heuristics for Java. The library is a framework of abstract algorithm templates: you implement the `Nodeable`, `Planable` and `Trackable` interfaces against your own entities and a `PathCostCalculation` against your cost source, and the library supplies the heuristics.
 
@@ -30,14 +30,14 @@ Vehicle-routing and plan-optimization heuristics for Java. The library is a fram
 ## Requirements
 
 - Java 21 or newer.
-- Apache Maven 3.9.12 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
+- Apache Maven 3.9.16 is downloaded automatically by the bundled Maven Wrapper; no local installation is needed.
 
 ## Maven dependency
 
 ```xml
 <dependency>
-    <groupId>ir.baho</groupId>
-    <artifactId>baho-algorithm</artifactId>
+    <groupId>com.github.liliumsoftware</groupId>
+    <artifactId>lilium-optimization</artifactId>
     <version>2.4.0</version>
 </dependency>
 ```
