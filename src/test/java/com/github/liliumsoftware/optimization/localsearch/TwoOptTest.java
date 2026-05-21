@@ -1,0 +1,189 @@
+/*
+ * Copyright the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.github.liliumsoftware.optimization.localsearch;
+
+import com.github.liliumsoftware.optimization.support.AlwaysFeasibleChecker;
+import com.github.liliumsoftware.optimization.support.MatrixCostCalculation;
+import com.github.liliumsoftware.optimization.support.TestNode;
+import com.github.liliumsoftware.optimization.support.TestPlan;
+import com.github.liliumsoftware.optimization.support.TestTwoOpt;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * 2-opt is validated by invariants rather than fixed expected tours: it must never worsen a tour, must return
+ * a valid permutation, must be a local optimum (idempotent), and must never beat the brute-force optimum.
+ */
+class TwoOptTest {
+
+    private MatrixCostCalculation calc(List<TestNode> nodes) {
+        MatrixCostCalculation calc = new MatrixCostCalculation();
+        calc.initializeCostMatrix(nodes);
+        return calc;
+    }
+
+    private long tourCost(MatrixCostCalculation calc, List<TestNode> nodes) {
+        long cost = 0;
+        for (int i = 0; i < nodes.size() - 1; i++) {
+            cost += calc.calculateCost(nodes.get(i), nodes.get(i + 1));
+        }
+        return cost;
+    }
+
+    /**
+     * Brute-force optimal open-path cost over all customer orderings, origin fixed first.
+     */
+    private long optimal(MatrixCostCalculation calc, TestNode origin, List<TestNode> customers) {
+        return permutations(customers).stream()
+                .mapToLong(perm -> {
+                    List<TestNode> path = new ArrayList<>();
+                    path.add(origin);
+                    path.addAll(perm);
+                    return tourCost(calc, path);
+                }).min().orElseThrow();
+    }
+
+    private <E> List<List<E>> permutations(List<E> items) {
+        if (items.isEmpty()) {
+            return List.of(List.of());
+        }
+        List<List<E>> result = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            List<E> rest = new ArrayList<>(items);
+            E head = rest.remove(i);
+            for (List<E> tail : permutations(rest)) {
+                List<E> perm = new ArrayList<>();
+                perm.add(head);
+                perm.addAll(tail);
+                result.add(perm);
+            }
+        }
+        return result;
+    }
+
+    @Test
+    void openPlanReversalMayMoveTheLastCustomer() {
+        // Regression: the reversal bound excluded the last node unconditionally, so on an OPEN plan the final
+        // customer could never move and O->C->A->B (60) got stuck at O->A->C->B (40) although O->A->B->C costs 30.
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 0, 10);
+        TestNode b = TestNode.customer("B", 0, 20);
+        TestNode c = TestNode.customer("C", 0, 30);
+        MatrixCostCalculation calc = calc(List.of(origin, a, b, c));
+
+        TestPlan plan = new TestPlan("p", List.of(origin, c, a, b));  // O->C->A->B = 30 + 20 + 10 = 60
+        long before = calc.calculateCost(plan);
+        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
+
+        assertThat(before).isEqualTo(60);
+        assertThat(result.getNodes()).containsExactly(origin, a, b, c);
+        assertThat(tourCost(calc, result.getNodes())).isEqualTo(30);
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
+    }
+
+    @Test
+    void closedPlanReversalPinsTheDestinationLast() {
+        // With a trailing DESTINATION the endpoints are fixed and only the interior is reordered.
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 0, 10);
+        TestNode b = TestNode.customer("B", 0, 20);
+        TestNode c = TestNode.customer("C", 0, 30);
+        TestNode depot = TestNode.destination("D", 0, 40);   // beyond C, so O-A-B-C-D (40) is the unique optimum
+        MatrixCostCalculation calc = calc(List.of(origin, a, b, c, depot));
+
+        TestPlan plan = new TestPlan("p", List.of(origin, c, a, b, depot));  // 30 + 20 + 10 + 20 = 80
+        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
+
+        assertThat(result.getNodes().getFirst()).isEqualTo(origin);
+        assertThat(result.getNodes().getLast()).isEqualTo(depot);
+        assertThat(result.getNodes()).containsExactly(origin, a, b, c, depot);
+        assertThat(tourCost(calc, result.getNodes())).isEqualTo(40);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {1L, 2L, 7L, 42L, 123L, 2024L, 99999L})
+    void neverWorsensAndNeverBeatsOptimum(long seed) {
+        Random random = new Random(seed);
+        for (int trial = 0; trial < 40; trial++) {
+            int n = 3 + random.nextInt(5);   // 3..7 customers (brute force stays cheap)
+            TestNode origin = TestNode.origin("O", 0, 0);
+            List<TestNode> customers = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                customers.add(TestNode.customer("C" + i, random.nextInt(50), random.nextInt(50)));
+            }
+            List<TestNode> all = new ArrayList<>();
+            all.add(origin);
+            all.addAll(customers);
+
+            List<TestNode> shuffled = new ArrayList<>(customers);
+            java.util.Collections.shuffle(shuffled, random);
+            List<TestNode> initial = new ArrayList<>();
+            initial.add(origin);
+            initial.addAll(shuffled);
+
+            TestPlan plan = new TestPlan("p", initial);
+            MatrixCostCalculation calc = calc(all);
+            long before = calc.calculateCost(plan);
+            TestTwoOpt twoOpt = new TestTwoOpt(calc, new AlwaysFeasibleChecker());
+            TestPlan result = twoOpt.apply(plan.copy());
+            long after = tourCost(calc, result.getNodes());
+
+            assertThat(after).as("never worsens (seed %d)", seed).isLessThanOrEqualTo(before);
+            assertThat(after).as("never beats optimum (seed %d)", seed)
+                    .isGreaterThanOrEqualTo(optimal(calc, origin, customers));
+            assertThat(result.getNodes()).as("valid permutation (seed %d)", seed)
+                    .containsExactlyInAnyOrderElementsOf(initial);
+            assertThat(result.getNodes().getFirst()).isEqualTo(origin);   // endpoint preserved
+
+            // Local optimum: a second pass cannot improve further.
+            TestPlan again = twoOpt.apply(result.copy());
+            assertThat(tourCost(calc, again.getNodes())).isEqualTo(after);
+        }
+    }
+
+    @Test
+    void isDeterministicAcrossRuns() {
+        TestNode origin = TestNode.origin("O", 0, 0);
+        List<TestNode> nodes = List.of(origin,
+                TestNode.customer("A", 5, 9), TestNode.customer("B", 30, 1),
+                TestNode.customer("C", 12, 40), TestNode.customer("D", 3, 3));
+        MatrixCostCalculation calc = calc(nodes);
+        TestPlan plan = new TestPlan("p", nodes);
+
+        TestPlan first = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan.copy());
+        TestPlan second = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan.copy());
+        assertThat(first.getNodes()).isEqualTo(second.getNodes());
+    }
+
+    @Test
+    void singleCustomerTourIsUnchanged() {
+        TestNode origin = TestNode.origin("O", 0, 0);
+        TestNode a = TestNode.customer("A", 4, 4);
+        MatrixCostCalculation calc = calc(List.of(origin, a));
+        TestPlan plan = new TestPlan("p", List.of(origin, a));
+        TestPlan result = new TestTwoOpt(calc, new AlwaysFeasibleChecker()).apply(plan);
+        assertThat(result.getNodes()).containsExactly(origin, a);
+    }
+
+}

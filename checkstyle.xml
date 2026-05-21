@@ -4,7 +4,7 @@
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
-    Checkstyle configuration for baho-algorithm: Google's checks (google_checks.xml, Checkstyle 13) adapted to
+    Checkstyle configuration for lilium-optimization: Google's checks (google_checks.xml, Checkstyle 13) adapted to
     the project's conventions - 4-space indentation, 120-column lines, imports grouped as third-party, then java/javax,
     then static (blank lines between; .editorconfig gives IntelliJ the same layout), camelCase names that may start with
     any lowercase letter and contain two consecutive capitals, Javadoc required on main sources; in tests the fixtures'
