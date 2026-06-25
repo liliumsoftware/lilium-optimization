@@ -79,7 +79,7 @@ The artifact is **not published to Maven Central** at this time. Build and insta
 <dependency>
     <groupId>com.github.liliumsoftware</groupId>
     <artifactId>lilium-optimization</artifactId>
-    <version>2.5.0-SNAPSHOT</version>
+    <version>3.0.0</version>
 </dependency>
 ```
 
@@ -284,7 +284,8 @@ credentials) that this project does not ship.
 ## Versioning
 
 Semantic Versioning (`MAJOR.MINOR.PATCH`): a new backward-compatible capability bumps MINOR, a backward-compatible fix
-bumps PATCH, a breaking public API change bumps MAJOR. Tags are `vX.Y.Z`. The current development version is `2.5.0-SNAPSHOT`.
+bumps PATCH, a breaking public API change bumps MAJOR. Tags are `vX.Y.Z`. The latest release is `3.0.0`; development
+continues on `develop` as `3.0.1-SNAPSHOT`.
 
 ## Migration from baho-algorithm
 
