@@ -4,7 +4,7 @@
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
-    Checkstyle configuration for baho-algorithm: Google's checks (google_checks.xml, Checkstyle 10) adapted to
+    Checkstyle configuration for lilium-optimization: Google's checks (google_checks.xml, Checkstyle 13) adapted to
     the project's conventions - 4-space indentation, 120-column lines, imports grouped as third-party, then java/javax,
     then static (blank lines between; .editorconfig gives IntelliJ the same layout), camelCase names that may start with
     any lowercase letter and contain two consecutive capitals, Javadoc required on main sources; in tests the fixtures'
@@ -114,7 +114,7 @@
         <module name="LeftCurly">
             <property name="id" value="LeftCurlyEol"/>
             <property name="tokens"
-                      value="ANNOTATION_DEF, CLASS_DEF, CTOR_DEF, ENUM_CONSTANT_DEF, ENUM_DEF, INTERFACE_DEF, LAMBDA, LITERAL_CATCH, LITERAL_DO, LITERAL_ELSE, LITERAL_FINALLY, LITERAL_FOR, LITERAL_IF, LITERAL_SWITCH, LITERAL_SYNCHRONIZED, LITERAL_TRY, LITERAL_WHILE, METHOD_DEF, OBJBLOCK, STATIC_INIT, RECORD_DEF, COMPACT_CTOR_DEF"/>
+                      value="ANNOTATION_DEF, CLASS_DEF, CTOR_DEF, ENUM_CONSTANT_DEF, ENUM_DEF, INTERFACE_DEF, LAMBDA, LITERAL_CATCH, LITERAL_DO, LITERAL_ELSE, LITERAL_FINALLY, LITERAL_FOR, LITERAL_IF, LITERAL_SWITCH, LITERAL_SYNCHRONIZED, LITERAL_TRY, LITERAL_WHILE, METHOD_DEF, OBJBLOCK, STATIC_INIT, RECORD_DEF, COMPACT_CTOR_DEF, SWITCH_RULE"/>
         </module>
         <module name="LeftCurly">
             <property name="id" value="LeftCurlyNl"/>
@@ -129,7 +129,7 @@
         </module>
         <module name="WhitespaceAfter">
             <property name="tokens"
-                      value="COMMA, SEMI, TYPECAST, ELLIPSIS, LITERAL_YIELD, LITERAL_CASE"/>
+                      value="COMMA, SEMI, TYPECAST, ELLIPSIS, LITERAL_YIELD, LITERAL_CASE, ANNOTATIONS"/>
         </module>
         <module name="WhitespaceAround">
             <property name="allowEmptyConstructors" value="true"/>
@@ -169,6 +169,7 @@
         <module name="FallThrough"/>
         <module name="UpperEll"/>
         <module name="ModifierOrder"/>
+        <module name="TextBlockGoogleStyleFormatting"/>
         <module name="EmptyLineSeparator">
             <property name="tokens"
                       value="PACKAGE_DEF, IMPORT, STATIC_IMPORT, CLASS_DEF, INTERFACE_DEF, ENUM_DEF, STATIC_INIT, INSTANCE_INIT, METHOD_DEF, CTOR_DEF, VARIABLE_DEF, RECORD_DEF, COMPACT_CTOR_DEF"/>
@@ -341,6 +342,11 @@
             <property name="tokens"
                       value="BAND, BOR, BSR, BXOR, DIV, EQUAL, GE, GT, LAND, LE, LITERAL_INSTANCEOF, LOR, LT, MINUS, MOD, NOT_EQUAL, PLUS, QUESTION, SL, SR, STAR, METHOD_REF, TYPE_EXTENSION_AND"/>
         </module>
+        <module name="OperatorWrap">
+            <property name="id" value="OperatorWrapEOL"/>
+            <property name="option" value="EOL"/>
+            <property name="tokens" value="LAMBDA"/>
+        </module>
         <module name="AnnotationLocation">
             <property name="id" value="AnnotationLocationTypeAndPackageAndMembers"/>
             <property name="tokens"
@@ -357,6 +363,7 @@
             <property name="tokens" value="VARIABLE_DEF"/>
             <property name="allowSamelineMultipleAnnotations" value="true"/>
         </module>
+        <module name="MissingOverrideOnRecordAccessor"/>
         <module name="NonEmptyAtclauseDescription"/>
         <module name="InvalidJavadocPosition"/>
         <module name="JavadocTagContinuationIndentation"/>

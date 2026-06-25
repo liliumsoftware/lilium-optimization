@@ -2,53 +2,123 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>ir.baho</groupId>
-    <artifactId>baho-algorithm</artifactId>
-    <version>2.4.1</version>
-    <name>baho-algorithm</name>
-    <description>Baho algorithms library</description>
+    <groupId>com.github.liliumsoftware</groupId>
+    <artifactId>lilium-optimization</artifactId>
+    <version>3.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>lilium-optimization</name>
+    <description>Vehicle-routing and plan-optimization heuristics for Java: Clarke-Wright savings construction,
+        cheapest and regret insertion, 2-opt local search, inter-route exchange, relocate and destroy-repair
+        moves, merge and balance operators, k-medoids seeding, resource assignment, zone partitioning, a shelf
+        bin-packing heuristic and an OSRM/GeoJSON routing client.
+    </description>
+    <url>https://github.com/liliumsoftware/lilium-optimization</url>
+
+    <organization>
+        <name>Lilium Software</name>
+        <url>https://github.com/liliumsoftware</url>
+    </organization>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Shahram Goodarzi</name>
+            <email>shahram.gdz@gmail.com</email>
+            <url>https://www.linkedin.com/in/shahram-goodarzi</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git@github.com:liliumsoftware/lilium-optimization.git</connection>
+        <developerConnection>scm:git:git@github.com:liliumsoftware/lilium-optimization.git</developerConnection>
+        <url>https://github.com/liliumsoftware/lilium-optimization</url>
+        <tag>v3.0.0</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/liliumsoftware/lilium-optimization/issues</url>
+    </issueManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>17</maven.compiler.release>
-        <maven.compiler.version>3.13.0</maven.compiler.version>
-        <maven.surefire.version>3.5.2</maven.surefire.version>
-        <maven.jar.version>3.4.2</maven.jar.version>
-        <maven.source.version>3.3.1</maven.source.version>
-        <maven.javadoc.version>3.11.2</maven.javadoc.version>
-        <lombok.version>1.18.36</lombok.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <jackson.version>2.18.2</jackson.version>
-        <junit.version>5.12.0</junit.version>
-        <assertj.version>3.27.3</assertj.version>
-        <jacoco.version>0.8.12</jacoco.version>
-        <maven.checkstyle.version>3.6.0</maven.checkstyle.version>
-        <checkstyle.version>10.21.4</checkstyle.version>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Reproducible builds: fixed timestamp for archive entries; bump when cutting a release. -->
+        <project.build.outputTimestamp>2026-06-25T15:02:21Z</project.build.outputTimestamp>
+
+        <!-- Lowest JDK the library runs on; the build itself may use any newer JDK. -->
+        <maven.compiler.release>21</maven.compiler.release>
+        <maven.minimum.version>3.9.9</maven.minimum.version>
+
+        <!-- Plugins -->
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+        <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+        <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+        <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <maven-release-plugin.version>3.3.1</maven-release-plugin.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <checkstyle.version>13.5.0</checkstyle.version>
+        <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+
+        <!-- Dependencies -->
+        <lombok.version>1.18.46</lombok.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <jackson.version>3.2.0</jackson.version>
+        <junit.version>6.1.0</junit.version>
+        <assertj.version>3.27.7</assertj.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
+        <!-- Compile-time only: Lombok generates code, nothing of it is needed at runtime. -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Every algorithm class logs through SLF4J, so the API must be on the consumer's classpath. -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
-            <scope>provided</scope>
         </dependency>
+        <!-- Only the routing package (OSRM client, GeoJSON model) needs Jackson; consumers that do not use it
+             need not pull it in, hence optional. -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
-            <scope>provided</scope>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -60,18 +130,111 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${maven-clean-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven-install-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven-deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-release-plugin</artifactId>
+                    <version>${maven-release-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco-maven-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven-checkstyle-plugin.version}</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-build-environment</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[${maven.minimum.version},)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[${maven.compiler.release},)</version>
+                                </requireJavaVersion>
+                                <dependencyConvergence />
+                                <banDuplicatePomDependencyVersions />
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>${maven.checkstyle.version}</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.puppycrawl.tools</groupId>
-                        <artifactId>checkstyle</artifactId>
-                        <version>${checkstyle.version}</version>
-                    </dependency>
-                </dependencies>
                 <configuration>
                     <!-- Google's checks adapted to this project (see checkstyle.xml); every violation fails the build,
                          main and test sources alike. -->
@@ -95,8 +258,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven.compiler.version}</version>
                 <configuration>
+                    <showWarnings>true</showWarnings>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -109,17 +272,29 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>${maven.surefire.version}</version>
+                <configuration>
+                    <trimStackTrace>false</trimStackTrace>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>${maven.jar.version}</version>
+                <configuration>
+                    <archive>
+                        <addMavenDescriptor>true</addMavenDescriptor>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                        <manifestEntries>
+                            <Automatic-Module-Name>com.github.liliumsoftware.optimization</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>${maven.source.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -132,9 +307,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>${maven.javadoc.version}</version>
                 <configuration>
+                    <!-- Fail the build on real Javadoc errors (broken references, malformed HTML). The
+                         missing-documentation check is off so hook-method templates need not repeat the obvious. -->
                     <doclint>all,-missing</doclint>
+                    <failOnError>true</failOnError>
+                    <failOnWarnings>false</failOnWarnings>
                     <quiet>true</quiet>
                 </configuration>
                 <executions>
@@ -146,12 +324,26 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <configuration>
+                    <!-- Git Flow: release:prepare runs on a release/x.y.z branch and creates the vX.Y.Z tag;
+                         nothing is pushed or deployed automatically. Merging to main/develop and publishing
+                         are separate, explicit steps (see README, "Release procedure"). -->
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <pushChanges>false</pushChanges>
+                    <localCheckout>true</localCheckout>
+                    <scmCommentPrefix xml:space="preserve">chore: </scmCommentPrefix>
+                    <goals>verify</goals>
+                    <preparationGoals>clean verify</preparationGoals>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <!-- Opt-in coverage: ./mvnw -Pcoverage test (HTML/CSV report under target/site/jacoco).
-             Kept in a profile so the default build - and the CI package/deploy - stay untouched. -->
+        <!-- Opt-in coverage: ./mvnw -Pcoverage verify (HTML/CSV/XML report under target/site/jacoco). -->
         <profile>
             <id>coverage</id>
             <build>
@@ -159,7 +351,6 @@
                     <plugin>
                         <groupId>org.jacoco</groupId>
                         <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>${jacoco.version}</version>
                         <executions>
                             <execution>
                                 <id>prepare-agent</id>
