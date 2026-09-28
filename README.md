@@ -66,7 +66,7 @@ a date-time plan-code generator.
 |                                   | Minimum | Verified with                          |
 |-----------------------------------|---------|----------------------------------------|
 | Java (runtime and compile target) | **21**  | OpenJDK 25.0.4                         |
-| Maven (via the wrapper)           | 3.9.9   | 3.9.16 (bundled wrapper configuration) |
+| Maven (via the wrapper)           | 3.9.9   | 3.10.0 (bundled wrapper configuration) |
 
 Runtime dependencies: `org.slf4j:slf4j-api` (always), `tools.jackson.core:jackson-databind` 3.x (only if you use the
 `routing` package; declared `optional`). Lombok is compile-time only.
@@ -236,7 +236,7 @@ are deterministic.
 ## Maven Wrapper
 
 The repository ships the Maven Wrapper 3.3.4 (`only-script` type: no binary JAR is committed). `./mvnw` downloads Apache
-Maven 3.9.16 on first use into `~/.m2/wrapper` and verifies its SHA-256 (`distributionSha256Sum` in
+Maven 3.10.0 on first use into `~/.m2/wrapper` and verifies its SHA-256 (`distributionSha256Sum` in
 `.mvn/wrapper/maven-wrapper.properties`). No global Maven installation is required.
 
 To upgrade the wrapped Maven version, change `distributionUrl` and `distributionSha256Sum` together.
