@@ -4,7 +4,7 @@
 
     <groupId>com.github.liliumsoftware</groupId>
     <artifactId>lilium-optimization</artifactId>
-    <version>3.0.1</version>
+    <version>3.0.2-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>lilium-optimization</name>
@@ -40,7 +40,7 @@
         <connection>scm:git:git@github.com:liliumsoftware/lilium-optimization.git</connection>
         <developerConnection>scm:git:git@github.com:liliumsoftware/lilium-optimization.git</developerConnection>
         <url>https://github.com/liliumsoftware/lilium-optimization</url>
-        <tag>v3.0.1</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
@@ -52,7 +52,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Reproducible builds: fixed timestamp for archive entries; bump when cutting a release. -->
-        <project.build.outputTimestamp>2026-09-30T09:11:58Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-09-30T09:12:26Z</project.build.outputTimestamp>
 
         <!-- Lowest JDK the library runs on; the build itself may use any newer JDK. -->
         <maven.compiler.release>21</maven.compiler.release>
