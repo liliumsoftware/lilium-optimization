@@ -52,7 +52,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Reproducible builds: fixed timestamp for archive entries; bump when cutting a release. -->
-        <project.build.outputTimestamp>2026-09-30T09:12:26Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-09-29T10:21:16Z</project.build.outputTimestamp>
 
         <!-- Lowest JDK the library runs on; the build itself may use any newer JDK. -->
         <maven.compiler.release>21</maven.compiler.release>
@@ -65,6 +65,8 @@
         <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
         <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+        <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
         <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
@@ -161,6 +163,16 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-source-plugin</artifactId>
                     <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>${maven-dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>${exec-maven-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -304,12 +316,61 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Delombok for the Javadoc: the dependency plugin publishes the Lombok jar's path as the property
+                 org.projectlombok:lombok:jar, and a forked JVM (Lombok needs no add-opens there) writes the sources
+                 with every Lombok annotation expanded to target/delombok. Bound to prepare-package, so only builds
+                 that package (and therefore build the Javadoc jar) pay for it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>lombok-jar-path</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>delombok</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <classpathScope>compile</classpathScope>
+                            <arguments>
+                                <argument>-jar</argument>
+                                <argument>${org.projectlombok:lombok:jar}</argument>
+                                <argument>delombok</argument>
+                                <argument>--quiet</argument>
+                                <argument>--encoding=UTF-8</argument>
+                                <argument>--classpath</argument>
+                                <classpath />
+                                <argument>--target</argument>
+                                <argument>${project.build.directory}/delombok</argument>
+                                <argument>${project.build.sourceDirectory}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
                     <!-- Fail the build on real Javadoc errors (broken references, malformed HTML). The
                          missing-documentation check is off so hook-method templates need not repeat the obvious. -->
+                    <!-- Javadoc runs on the delomboked sources (see the delombok execution above), so the
+                         getters, setters and constructors Lombok generates appear in the API docs. -->
+                    <sourcepath>${project.build.directory}/delombok</sourcepath>
                     <doclint>all,-missing</doclint>
                     <failOnError>true</failOnError>
                     <failOnWarnings>false</failOnWarnings>
