@@ -16,11 +16,22 @@
 
 package com.github.liliumsoftware.optimization.routing;
 
+import java.io.Serial;
+
 /**
- * Raised when a routing request fails: the server cannot be reached or the call is interrupted, it returns a
- * non-200 status, or its response cannot be parsed or lacks the expected routes or fields.
+ * Raised by {@link RoutingProvider} when a routing request fails: the server cannot be reached, the exchange times out
+ * (cause {@link java.net.http.HttpTimeoutException}) or the calling thread is interrupted (cause
+ * {@link InterruptedException}, interrupt flag restored), the server returns a non-200 status, or its response cannot
+ * be parsed or lacks the expected routes, fields or table shape. Invalid caller input (a bad coordinate or base URL)
+ * is reported as {@link IllegalArgumentException} instead. Unchecked.
  */
 public class RoutingException extends RuntimeException {
+
+    /**
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = -1803339220209367941L;
 
     /**
      * Creates an exception without a cause.
@@ -32,7 +43,10 @@ public class RoutingException extends RuntimeException {
     }
 
     /**
-     * Wraps the underlying I/O or parsing failure.
+     * Creates an exception wrapping the underlying I/O, timeout, interrupt or parsing failure.
+     *
+     * @param message   what went wrong with the request
+     * @param throwable the underlying failure; may be {@code null}
      */
     public RoutingException(String message, Throwable throwable) {
         super(message, throwable);

@@ -41,7 +41,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLContext;
@@ -53,8 +55,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * {@link RoutingProvider} is the only place in the library where an external unit system is translated into
  * the internal one, so two contracts are load-bearing and easy to break silently: OSRM reports durations in
- * <em>seconds</em> and they must arrive as integral <em>milliseconds</em> (while distances stay raw metres),
- * and coordinates must be emitted as {@code longitude,latitude} — the classic swap that produces plausible
+ * <em>seconds</em> and they must arrive as integral <em>milliseconds</em> (while distances stay metres, rounded to
+ * whole ones), and coordinates must be emitted as {@code longitude,latitude} — the classic swap that produces plausible
  * but completely wrong routes. Everything is exercised against a loopback {@link HttpServer} standing in for
  * OSRM, so the tests stay hermetic and deterministic.
  */
@@ -65,6 +67,10 @@ class RoutingProviderTest {
     private final AtomicInteger responseDelayMillis = new AtomicInteger();
     private final AtomicReference<URI> requestedUri = new AtomicReference<>();
     private final List<String> requestedPaths = Collections.synchronizedList(new ArrayList<>());
+    /**
+     * Cuts a pending response delay short when the test ends, so stopping the server never waits for it.
+     */
+    private final CountDownLatch release = new CountDownLatch(1);
 
     private HttpServer server;
     private RoutingProvider provider;
@@ -83,7 +89,7 @@ class RoutingProviderTest {
             requestedUri.set(exchange.getRequestURI());
             requestedPaths.add(exchange.getRequestURI().getPath());
             try {
-                Thread.sleep(responseDelayMillis.get());
+                release.await(responseDelayMillis.get(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -100,6 +106,7 @@ class RoutingProviderTest {
 
     @AfterEach
     void stopFakeOsrm() {
+        release.countDown();
         provider.close();
         server.stop(0);
     }
@@ -199,12 +206,16 @@ class RoutingProviderTest {
     }
 
     @Test
-    void fractionalDistanceMetresAreTruncated() {
+    void fractionalDistanceMetresAreRoundedToTheNearestMetre() {
+        // The distance used to be truncated (345.9 m became 345 m) while durations were rounded.
         responseBody.set("{\"routes\":[{\"distance\":345.9}]}");
+        assertThat(provider.getDistance(List.of(new Point(4.4, 52.2)))).isEqualTo(346L);
 
-        long distance = provider.getDistance(List.of(new Point(4.4, 52.2)));
+        responseBody.set("{\"routes\":[{\"distance\":345.5}]}");
+        assertThat(provider.getDistance(List.of(new Point(4.4, 52.2)))).isEqualTo(346L);
 
-        assertThat(distance).isEqualTo(345L);
+        responseBody.set("{\"routes\":[{\"distance\":345.4}]}");
+        assertThat(provider.getDistance(List.of(new Point(4.4, 52.2)))).isEqualTo(345L);
     }
 
     @Test
