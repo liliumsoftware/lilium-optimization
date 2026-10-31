@@ -26,12 +26,25 @@ import tools.jackson.databind.ValueSerializer;
  * alongside an altitude, which is the invariant {@code LngLatAlt} itself enforces).
  *
  * <p>Paired with {@link LngLatAltDeserializer} so a coordinate round-trips through the standard form rather
- * than through a non-standard {@code {"longitude":…}} object that no GeoJSON consumer understands.
+ * than through a non-standard {@code {"longitude":…}} object that no GeoJSON consumer understands. Stateless and
+ * thread-safe.
  */
 public class LngLatAltSerializer extends ValueSerializer<LngLatAlt> {
 
     /**
-     * Writes {@code [longitude, latitude]} plus altitude and additional elements when an altitude is present.
+     * Creates the serializer; Jackson instantiates it through {@link LngLatAlt}'s {@code @JsonSerialize}.
+     */
+    public LngLatAltSerializer() {
+    }
+
+    /**
+     * Writes {@code [longitude, latitude]}, followed by the altitude and the additional elements when an altitude is
+     * present. A position without altitude is therefore written as two elements even if it carries additional
+     * elements (which {@link LngLatAlt} only allows alongside an altitude).
+     *
+     * @param value     the position to write; must not be {@code null} (Jackson handles {@code null} values itself)
+     * @param generator the generator to write the array to
+     * @param context   the serialization context (unused)
      */
     @Override
     public void serialize(LngLatAlt value, JsonGenerator generator, SerializationContext context) {
