@@ -23,14 +23,25 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Base of the GeoJSON object hierarchy: carries the optional {@code crs} and {@code bbox} common to all
- * geometries and drives Jackson polymorphic (de)serialization by the JSON {@code "type"} property. Unknown
- * properties are ignored so responses from varied providers deserialize leniently.
+ * Base of the GeoJSON object hierarchy: carries the optional {@code crs} and {@code bbox} members common to all
+ * GeoJSON objects and drives Jackson polymorphic (de)serialization by the JSON {@code "type"} property.
+ *
+ * <p>The type id is the simple class name ({@link JsonTypeInfo.Id#NAME}) resolved against a closed list of subtypes:
+ * {@link Point}, {@link MultiPoint}, {@link LineString} and this class itself ({@code "GeoJsonObject"}). No class-name
+ * based typing is involved, so JSON from an untrusted source cannot make Jackson instantiate an arbitrary class through
+ * this hierarchy; an unknown {@code "type"} fails with an {@code InvalidTypeIdException}. A raw {@link Geometry} is not
+ * in the list (see there). {@code null} members are omitted on output and unknown properties are ignored on input, so
+ * responses from varied providers deserialize leniently.
+ *
+ * <p>A mutable bean: the setters exist for Jackson binding, {@code equals}/{@code hashCode} are value-based over the
+ * runtime class, {@code crs} and {@code bbox} (subclasses add their coordinates). Not thread-safe; treat an instance
+ * as immutable once it is shared and do not change it while it is used as a map key or set element.
  */
 @JsonTypeInfo(property = "type", use = JsonTypeInfo.Id.NAME)
 @JsonSubTypes({
@@ -44,7 +55,22 @@ import java.util.Objects;
 @Getter
 public class GeoJsonObject implements Serializable {
 
+    /**
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = -5113668758283588289L;
+
+    /**
+     * The coordinate reference system member, or {@code null} when absent (the usual case: GeoJSON defaults to WGS 84).
+     * Stored as given, not copied.
+     */
     private Crs crs;
+    /**
+     * The bounding box member, {@code [minLon, minLat, maxLon, maxLat]} (or with altitudes, {@code [minLon, minLat,
+     * minAlt, maxLon, maxLat, maxAlt]}), or {@code null} when absent. Its length is not checked, and the array is held
+     * by reference: the getter returns it live and the setter stores it without copying.
+     */
     private double[] bbox;
 
     @Override

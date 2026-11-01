@@ -26,10 +26,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public enum CrsType {
 
+    /**
+     * A named CRS, identified by the {@code name} property (for example an OGC URN); written as {@code "name"}.
+     */
     @JsonProperty("name")
     @JsonAlias("NAME")
     NAME,
 
+    /**
+     * A linked CRS, identified by the {@code href} (and optional {@code type}) properties; written as
+     * {@code "link"}.
+     */
     @JsonProperty("link")
     @JsonAlias("LINK")
     LINK

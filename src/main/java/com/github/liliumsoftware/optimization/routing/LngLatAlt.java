@@ -22,14 +22,29 @@ import lombok.Setter;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import tools.jackson.databind.annotation.JsonSerialize;
 
+import java.io.IOException;
+import java.io.InvalidObjectException;
+import java.io.ObjectInputStream;
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * A GeoJSON coordinate: longitude, latitude, optional altitude, and optional additional elements. Follows the
- * GeoJSON rule that additional elements are only valid alongside an altitude, and rejects NaN/infinite extras.
- * {@code equals}/{@code hashCode} are value-based. The class is mutable, so a coordinate used as a map key or set
- * element must not be changed while it is stored there.
+ * A GeoJSON position: longitude, latitude, optional altitude ({@code NaN} when absent), and optional additional
+ * elements. Enforces the GeoJSON rule that additional elements are only valid alongside an altitude, and rejects
+ * {@code NaN}/infinite additional elements; longitude, latitude and altitude themselves are not validated (range
+ * checks happen where a position is used, for example in {@link RoutingProvider}).
+ *
+ * <p>{@code equals}/{@code hashCode} are value-based and compare the components with {@link Double#compare}, so
+ * {@code 0.0} and {@code -0.0} are <em>not</em> equal while {@code NaN} equals {@code NaN} (two positions without
+ * altitude are equal when the rest matches). The class is mutable, so a position used as a map key or set element
+ * must not be changed while it is stored there; it is not thread-safe.
+ *
+ * <p>Java serialization keeps the default serialized form (the four fields, unchanged since 3.0.1), and reading an
+ * instance back restores the invariants above: missing ({@code null}) additional elements become an empty array, the
+ * elements are copied so the instance never shares an array with the stream, and additional elements that are
+ * {@code NaN} or infinite, or present without an altitude, make deserialization fail with
+ * {@link InvalidObjectException}.
  *
  * <p>JSON form is the GeoJSON <em>array</em> {@code [longitude, latitude(, altitude, extra…)]}, not a bean
  * object — see {@link LngLatAltSerializer} / {@link LngLatAltDeserializer}. Without those handlers Jackson
@@ -41,22 +56,45 @@ import java.util.Arrays;
 @Getter
 public class LngLatAlt implements Serializable {
 
+    /**
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = 1457764513099864671L;
+
+    /**
+     * The longitude in degrees; the setter does not validate it.
+     */
     @Setter
     private double longitude;
+    /**
+     * The latitude in degrees; the setter does not validate it.
+     */
     @Setter
     private double latitude;
+    /**
+     * The altitude, or {@code NaN} when there is none (see {@link #hasAltitude()}). Set through
+     * {@link #setAltitude(double)}, which keeps the rule that additional elements need an altitude.
+     */
     private double altitude = Double.NaN;
+    /**
+     * Additional elements, never shared with callers ({@link #getAdditionalElements()} returns a copy); empty when
+     * there are none.
+     */
     @Getter(AccessLevel.NONE)
     private double[] additionalElements = new double[0];
 
     /**
-     * The origin {@code (0, 0)} without altitude (for deserialization).
+     * Creates the position {@code (0, 0)} without altitude (for deserialization).
      */
     public LngLatAlt() {
     }
 
     /**
-     * A 2-D coordinate (altitude {@code NaN}).
+     * Creates a 2-D position (altitude {@code NaN}).
+     *
+     * @param longitude the longitude in degrees; not validated
+     * @param latitude  the latitude in degrees; not validated
      */
     public LngLatAlt(double longitude, double latitude) {
         this.longitude = longitude;
@@ -64,7 +102,11 @@ public class LngLatAlt implements Serializable {
     }
 
     /**
-     * A 3-D coordinate.
+     * Creates a 3-D position.
+     *
+     * @param longitude the longitude in degrees; not validated
+     * @param latitude  the latitude in degrees; not validated
+     * @param altitude  the altitude; {@code NaN} means none
      */
     public LngLatAlt(double longitude, double latitude, double altitude) {
         this.longitude = longitude;
@@ -73,10 +115,14 @@ public class LngLatAlt implements Serializable {
     }
 
     /**
-     * A 3-D coordinate with additional elements (GeoJSON allows them only alongside an altitude).
+     * Creates a 3-D position with additional elements (GeoJSON allows them only alongside an altitude).
      *
-     * @throws IllegalArgumentException if an element is NaN or infinite, or if elements are given without an
-     *                                  altitude
+     * @param longitude          the longitude in degrees; not validated
+     * @param latitude           the latitude in degrees; not validated
+     * @param altitude           the altitude; must not be {@code NaN} when additional elements are given
+     * @param additionalElements further position elements, copied; {@code null} or empty means none
+     * @throws IllegalArgumentException if an element is {@code NaN} or infinite, or if elements are given while
+     *                                  {@code altitude} is {@code NaN}
      */
     public LngLatAlt(double longitude, double latitude, double altitude, double... additionalElements) {
         this.longitude = longitude;
@@ -106,16 +152,21 @@ public class LngLatAlt implements Serializable {
     }
 
     /**
-     * A copy of the additional elements (empty when there are none); changing it does not change this coordinate.
+     * The additional elements, as a copy: changing the returned array does not change this position.
+     *
+     * @return the additional elements; empty, never {@code null}, when there are none
      */
     public double[] getAdditionalElements() {
         return additionalElements.clone();
     }
 
     /**
-     * Replaces the additional elements; {@code null} clears them.
+     * Replaces the additional elements with a copy of {@code additionalElements}; {@code null} or an empty array
+     * clears them. On failure the position is left unchanged.
      *
-     * @throws IllegalArgumentException if an element is NaN or infinite, or if no altitude is present
+     * @param additionalElements the new additional elements
+     * @throws IllegalArgumentException if an element is {@code NaN} or infinite, or if elements are given while no
+     *                                  altitude is present
      */
     public void setAdditionalElements(double... additionalElements) {
         double[] elements = validatedElements(additionalElements);
@@ -124,7 +175,9 @@ public class LngLatAlt implements Serializable {
     }
 
     /**
-     * Whether an altitude is present (not {@code NaN}).
+     * Whether an altitude is present.
+     *
+     * @return {@code true} if the altitude is not {@code NaN}
      */
     public boolean hasAltitude() {
         return !Double.isNaN(altitude);
@@ -132,19 +185,43 @@ public class LngLatAlt implements Serializable {
 
     /**
      * Whether any additional element is present.
+     *
+     * @return {@code true} if there is at least one additional element
      */
     public boolean hasAdditionalElements() {
         return additionalElements.length > 0;
     }
 
     /**
-     * Sets the altitude.
+     * Sets the altitude; {@code NaN} removes it. On failure the position is left unchanged.
      *
-     * @throws IllegalArgumentException if set to {@code NaN} while additional elements are present
+     * @param altitude the altitude, or {@code NaN} for none; infinite values are accepted
+     * @throws IllegalArgumentException if {@code altitude} is {@code NaN} while additional elements are present
      */
     public void setAltitude(double altitude) {
         checkAltitudeAndAdditionalElements(altitude, this.additionalElements);
         this.altitude = altitude;
+    }
+
+    /**
+     * Reads the default serialized form, then restores the invariants a crafted stream could break: {@code null}
+     * additional elements become an empty array, the elements are copied, and invalid ones are rejected.
+     *
+     * @param in the stream to read from
+     * @throws IOException            if reading fails, or (as {@link InvalidObjectException}) if an additional element
+     *                                is {@code NaN} or infinite or additional elements are present without an
+     *                                altitude
+     * @throws ClassNotFoundException if a class of the serialized form cannot be found
+     */
+    @Serial
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        try {
+            additionalElements = validatedElements(additionalElements);
+            checkAltitudeAndAdditionalElements(altitude, additionalElements);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidObjectException(e.getMessage(), e);
+        }
     }
 
     @Override

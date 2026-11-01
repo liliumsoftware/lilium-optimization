@@ -16,19 +16,32 @@
 
 package com.github.liliumsoftware.optimization.routing;
 
+import java.io.Serial;
+
 /**
- * GeoJSON {@code MultiPoint}: an unordered-by-contract collection of coordinates.
+ * GeoJSON {@code MultiPoint}: a collection of positions whose order carries no meaning in GeoJSON (the list keeps
+ * the order given). Serialized as {@code {"type": "MultiPoint", "coordinates": [[lon, lat], …]}}; also the base of
+ * {@link LineString}.
  */
 public class MultiPoint extends Geometry<LngLatAlt> {
 
     /**
-     * An empty collection of points.
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = -5585934090492157948L;
+
+    /**
+     * Creates an empty collection of positions.
      */
     public MultiPoint() {
     }
 
     /**
-     * A collection holding {@code points} in the given order.
+     * Creates a collection holding {@code points} in the given order; the positions are not copied.
+     *
+     * @param points the positions; must not be {@code null}
+     * @throws NullPointerException if {@code points} is {@code null}
      */
     public MultiPoint(LngLatAlt... points) {
         super(points);

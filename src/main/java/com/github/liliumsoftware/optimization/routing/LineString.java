@@ -16,19 +16,32 @@
 
 package com.github.liliumsoftware.optimization.routing;
 
+import java.io.Serial;
+
 /**
- * GeoJSON {@code LineString}: an ordered path of coordinates — the shape a route geometry deserializes to.
+ * GeoJSON {@code LineString}: an ordered path of positions, the shape {@link RoutingProvider#getRoute} returns a
+ * route geometry as. The number of positions is not checked (GeoJSON requires two or more). Serialized as
+ * {@code {"type": "LineString", "coordinates": [[lon, lat], …]}}.
  */
 public class LineString extends MultiPoint {
 
     /**
-     * An empty path.
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = 4410510653763357723L;
+
+    /**
+     * Creates an empty path.
      */
     public LineString() {
     }
 
     /**
-     * A path through {@code points} in order.
+     * Creates a path through {@code points} in order; the positions are not copied.
+     *
+     * @param points the positions of the path; must not be {@code null}
+     * @throws NullPointerException if {@code points} is {@code null}
      */
     public LineString(LngLatAlt... points) {
         super(points);
