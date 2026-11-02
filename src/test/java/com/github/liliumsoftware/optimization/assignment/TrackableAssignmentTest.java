@@ -439,8 +439,8 @@ class TrackableAssignmentTest {
 
         // A resource already used by a plan may only stay in the pool when it supports a second dispatch,
         // which requires isReturns(); the one-way vehicle is therefore dropped.
-        assertThat(assignment.currentTrackables()).extracting(TestTrackable::getCode)
-                .contains("returning").doesNotContain("one-way");
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::toString)
+                .containsExactly("returning#0");
     }
 
     @Test
@@ -461,8 +461,8 @@ class TrackableAssignmentTest {
 
         // The vehicle's first run is withheld (it is already committed); its second run plus the newly supplied
         // plans are what remains to be planned.
-        assertThat(toPlan).contains(secondRun, extra).doesNotContain(firstRun);
-        assertThat(assignment.currentTrackables()).extracting(TestTrackable::getCode).contains("V");
+        assertThat(toPlan).containsExactly(secondRun, extra);
+        assertThat(assignment.currentTrackables()).extracting(TestTrackable::toString).containsExactly("V#0");
     }
 
     @Test

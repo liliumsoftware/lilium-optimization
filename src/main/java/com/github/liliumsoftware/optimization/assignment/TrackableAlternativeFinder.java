@@ -23,23 +23,37 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Lists, for a given resource, the codes of other resources that could stand in for it — the domain defines
- * interchangeability via {@link #isAlternative}. Used to offer substitute vehicles/drivers when a preferred
- * one is unavailable.
+ * Lists, for a given resource, the codes of other resources that could stand in for it; the domain defines
+ * interchangeability through {@link #isAlternative}. Used to offer substitute vehicles/drivers when a preferred one is
+ * unavailable. The fleet may be given unexpanded (one element per resource) or expanded (such as
+ * {@link TrackableAssignment#getTrackables()}): every code is listed at most once either way. Holds no mutable state,
+ * so one instance may serve concurrent calls as long as the fleet list is not modified.
+ *
+ * @param <T> the resource type
  */
 @RequiredArgsConstructor
 public abstract class TrackableAlternativeFinder<T extends Trackable<T>> {
 
+    /**
+     * The fleet the alternatives are drawn from, unexpanded or expanded into units; kept, not copied.
+     */
     private final List<T> trackables;
 
     /**
-     * Codes of every other resource that {@link #isAlternative} accepts as a stand-in for {@code trackable}, in
-     * fleet order.
+     * Codes of the resources of the fleet that have a code other than {@code trackable}'s and that
+     * {@link #isAlternative} accepts as a stand-in for it, each code once. When several fleet elements share a code
+     * (the units of an expanded resource), the code is listed if {@link #isAlternative} accepts one of them; once
+     * listed, the later elements with that code are not asked again.
+     *
+     * @param trackable the resource to replace; need not be an element of the fleet
+     * @return a new mutable list of distinct codes, in the fleet order of their first accepted element; empty if there
+     *         is no alternative
      */
     public List<String> getAlternatives(T trackable) {
         List<String> alternatives = new ArrayList<>();
         for (T t : trackables) {
-            if (!trackable.getCode().equals(t.getCode()) && isAlternative(trackable, t)) {
+            if (!trackable.getCode().equals(t.getCode()) && !alternatives.contains(t.getCode())
+                    && isAlternative(trackable, t)) {
                 alternatives.add(t.getCode());
             }
         }
@@ -47,7 +61,11 @@ public abstract class TrackableAlternativeFinder<T extends Trackable<T>> {
     }
 
     /**
-     * Whether {@code alternative} may stand in for {@code trackable}.
+     * Whether {@code alternative} may stand in for {@code trackable}. Only called for resources with different codes.
+     *
+     * @param trackable   the resource to replace
+     * @param alternative a resource of the fleet with a different code
+     * @return {@code true} if {@code alternative} can do the job of {@code trackable}
      */
     protected abstract boolean isAlternative(T trackable, T alternative);
 

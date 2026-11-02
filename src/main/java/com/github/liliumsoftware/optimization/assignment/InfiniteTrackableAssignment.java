@@ -23,15 +23,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Assignment variant for an unlimited fleet: every plan is simply assigned from the full trackable list with
- * no contention, so there is no relocate/exchange repair and assignment never fails for lack of resources.
- * Used when resource count is not a binding constraint.
+ * Assignment variant for an unlimited fleet: every plan is assigned from the whole expanded fleet
+ * ({@link #getTrackables()}, not the current pool) with no contention, so there is no relocate/exchange/reassign
+ * repair and assignment never fails for lack of resources. Used when resource count is not a binding constraint.
  *
- * <p>Every entry point follows that rule — including {@link #assignAndExchange}, the sub-pool overloads and the
- * zone-group overload: no unit is ever withdrawn, units held by other plans stay available, and the same unit
- * instance may back several plans. A plan only fails to be assigned when no unit of the offered pool fits it. Unlike
- * the finite variant, every overload offers the pool sorted by {@link #comparator} for the plan at hand, so each plan
- * gets the unit the consumer prefers for it.
+ * <p>Every entry point follows that rule, including {@link #assignAndExchange}, the sub-pool overloads and the
+ * zone-group overloads: no unit is ever withdrawn, units held by other plans stay available, {@code otherPlans} is
+ * ignored, and the same unit instance may back several plans. A plan only fails to be assigned when no unit on offer
+ * fits it. Like the list-based overloads of the finite variant, every overload offers the units sorted by
+ * {@link #comparator} for the plan at hand; the difference is that a unit taken by one plan is still offered to the
+ * next. {@link #assignWithTrackable}, {@link #withoutIdleUnits}, {@link #hasIdleUnits} and {@link #wantedIdleUnits}
+ * are inherited unchanged; {@link #wantedIdleUnits} stays {@code false} because no overload here records it.
+ *
+ * <p>No overload of this class is synchronized: they read only the immutable expanded fleet and their arguments.
+ *
+ * @param <P> the plan type
+ * @param <T> the resource type being assigned
  */
 public abstract class InfiniteTrackableAssignment<P
         extends Planable<P, ?, T>, T extends Trackable<T>> extends TrackableAssignment<P, T> {
@@ -39,15 +46,17 @@ public abstract class InfiniteTrackableAssignment<P
     /**
      * Creates the assignment over {@code trackables}.
      *
-     * @param trackables the fleet; expanded per {@link TrackableAssignment#TrackableAssignment(List)}
+     * @param trackables the fleet; expanded as described in {@link TrackableAssignment#TrackableAssignment(List)}
      */
     public InfiniteTrackableAssignment(List<T> trackables) {
         super(trackables);
     }
 
     /**
-     * Assigns {@code plan} from the full fleet. Always possible unless no unit fits the plan.
+     * Assigns {@code plan} from the whole expanded fleet, offered sorted by {@link #comparator} through
+     * {@link #assign(Planable, List)}. Always possible unless no unit fits the plan.
      *
+     * @param plan the plan to assign; mutated
      * @return {@code true} if a unit was assigned
      */
     public boolean assign(P plan) {
@@ -55,7 +64,11 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns every plan independently from the full fleet (units may be reused across plans).
+     * Assigns every plan independently from the whole expanded fleet (units may be reused across plans), in list order,
+     * stopping at the first plan that cannot be assigned: the later plans are then not touched.
+     *
+     * @param plans the plans to assign; the plans are mutated in place, the list is not modified
+     * @return {@code true} if every plan got a unit; {@code false} at the first plan that did not
      */
     @Override
     public boolean assign(List<P> plans) {
@@ -63,7 +76,12 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns {@code plan} from the full fleet; refuses a plan that is already in {@code plans}.
+     * Assigns {@code plan} from the whole expanded fleet, including the units {@code plans} hold.
+     *
+     * @param plans the plans already assigned; only used to refuse a plan that is one of them
+     * @param plan  the plan to assign; mutated
+     * @return {@code true} if {@code plan} got a unit; {@code false} if {@code plans} already contains it (by
+     *         {@code equals}) or no unit fits
      */
     @Override
     public boolean assign(List<P> plans, P plan) {
@@ -74,7 +92,14 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns every plan from the full fleet; {@code otherPlans} never contend for units in this variant.
+     * Assigns every plan from the whole expanded fleet, exactly like {@link #assign(List)}: {@code otherPlans} never
+     * contend for units in this variant, no repair pass runs, the plans are mutated in place and the list is never
+     * modified. Stops at the first plan that cannot be assigned, leaving the later plans untouched. It records nothing
+     * for {@link #wantedIdleUnits}.
+     *
+     * @param otherPlans ignored
+     * @param plans      the plans to assign
+     * @return {@code true} if every plan got a unit; {@code false} at the first plan that did not
      */
     @Override
     public boolean assign(List<P> otherPlans, List<P> plans) {
@@ -82,7 +107,11 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns every plan from the full fleet; {@code otherPlans} never contend for units in this variant.
+     * Same as {@link #assign(List)}: {@code otherPlans} never contend for units in this variant.
+     *
+     * @param otherPlans ignored
+     * @param plans      the plans to assign
+     * @return {@code true} if every plan got a unit; {@code false} at the first plan that did not
      */
     @Override
     public boolean assignGreedy(List<P> otherPlans, List<P> plans) {
@@ -90,9 +119,11 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns every plan from the full fleet. There is nothing to repair with an unlimited fleet, so the relocate,
-     * exchange and reassign passes of the finite variant do not run.
+     * Assigns every plan from the whole expanded fleet. Unlike {@link #assign(List)} it tries every plan, even after
+     * one could not be assigned. There is nothing to repair with an unlimited fleet, so the relocate, exchange and
+     * reassign passes of the finite variant do not run, and the list is never modified.
      *
+     * @param plans the plans to assign; the plans are mutated in place
      * @return {@code true} if every plan got a unit
      */
     @Override
@@ -105,7 +136,13 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns every plan from the given sub-pool without withdrawing units (each plan sees the whole sub-pool).
+     * Assigns every plan from {@code trackables} without withdrawing units: each plan is offered the whole sub-pool,
+     * sorted by {@link #comparator}. Stops at the first plan that cannot be assigned, leaving the later plans
+     * untouched.
+     *
+     * @param plans      the plans to assign; the plans are mutated in place, the list is not modified
+     * @param trackables the sub-pool; copied, not modified
+     * @return {@code true} if every plan got a unit; {@code false} at the first plan that did not
      */
     @Override
     public boolean assignWithTrackables(List<P> plans, List<T> trackables) {
@@ -113,8 +150,14 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * Assigns {@code plan} from the given sub-pool, including units {@code plans} hold; refuses a plan that is already
-     * in {@code plans}.
+     * Assigns {@code plan} from {@code trackables}, including the units {@code plans} hold, sorted by
+     * {@link #comparator}.
+     *
+     * @param plans      the plans already assigned; only used to refuse a plan that is one of them
+     * @param plan       the plan to assign; mutated
+     * @param trackables the sub-pool; copied, not modified
+     * @return {@code true} if {@code plan} got a unit; {@code false} if {@code plans} already contains it (by
+     *         {@code equals}) or no offered unit fits
      */
     @Override
     public boolean assignWithTrackables(List<P> plans, P plan, List<T> trackables) {
@@ -125,7 +168,9 @@ public abstract class InfiniteTrackableAssignment<P
     }
 
     /**
-     * {@code true}: with an unlimited fleet one unit may back any number of plans.
+     * Whether one unit may back several plans at once; always, with an unlimited fleet.
+     *
+     * @return {@code true}
      */
     @Override
     public boolean sharesUnits() {

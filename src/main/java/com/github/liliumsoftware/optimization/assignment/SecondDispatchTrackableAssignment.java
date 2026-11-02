@@ -21,15 +21,25 @@ import com.github.liliumsoftware.optimization.domain.Trackable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * Assignment variant that lets a returning resource be re-used for a second run. {@link #secondDispatchOnly}
- * restricts the available pool to resources that support a second dispatch; {@link #secondDispatchAndOthers}
- * separates each resource's first plan from its second so the two runs can be planned and assigned coherently.
- * Requires resources whose {@link Trackable#isReturns()} and {@link Trackable#isSupportSecondDispatch()} hold.
- * Units are told apart by {@code equals} (code and index), so the expanded units of one multi-unit resource stay
- * independent: re-dispatching one of them neither removes nor re-admits its siblings.
+ * Assignment variant that lets a returning resource be re-used for a second run. Both mutators replace the current
+ * pool ({@link #currentTrackables}) that the inherited {@code assign…} entry points draw from:
+ * {@link #secondDispatchOnly} narrows it to the units that may run again after a first planning round, and
+ * {@link #secondDispatchAndOthers} separates each re-dispatched unit's first run from the rest of the plans and resets
+ * the pool to the whole fleet. By default ({@link #supportSecondDispatch}) a held unit qualifies for a second run
+ * when its {@link Trackable#isReturns()} and {@link Trackable#isSupportSecondDispatch()} hold; a plan marks itself as
+ * a second run through {@link Planable#isSecondDispatch()}. Units are told apart by {@code equals} (code and index),
+ * so the expanded units of one multi-unit resource stay independent: re-dispatching one of them neither removes nor
+ * re-admits its siblings.
+ *
+ * <p>The mutators are synchronized, but the {@code assign…} entry points are not: do not call the mutators while an
+ * assignment on this instance is in flight.
+ *
+ * @param <P> the plan type
+ * @param <T> the resource type being assigned
  */
 public abstract class SecondDispatchTrackableAssignment<P
         extends Planable<P, ?, T>, T extends Trackable<T>> extends TrackableAssignment<P, T> {
@@ -37,7 +47,8 @@ public abstract class SecondDispatchTrackableAssignment<P
     /**
      * Creates the assignment over {@code trackables}.
      *
-     * @param trackables the fleet; resources must report {@link Trackable#isReturns()} and
+     * @param trackables the fleet, expanded as described in {@link TrackableAssignment#TrackableAssignment(List)};
+     *                   resources must report {@link Trackable#isReturns()} and
      *                   {@link Trackable#isSupportSecondDispatch()} to be eligible for a second run
      */
     public SecondDispatchTrackableAssignment(List<T> trackables) {
@@ -45,9 +56,13 @@ public abstract class SecondDispatchTrackableAssignment<P
     }
 
     /**
-     * Narrows the current pool to resources that may run again: the trackables of {@code plans} (as fresh copies,
-     * each unit once even when a first and a second run both hold it) plus unused ones, keeping only those that
-     * support a second dispatch. Plans without a trackable contribute nothing.
+     * Narrows the current pool to the units that may run again. The new pool holds the units of the current pool that
+     * no plan of {@code plans} holds, followed by the units the plans hold, each as
+     * {@link #getTrackableForSecondDispatch} gives it (a fresh copy by default) and each unit once even when a first
+     * and a second run both hold it; then every unit that {@link #supportSecondDispatch} rejects is dropped. Plans
+     * without a trackable contribute nothing. A held unit enters the pool even if the current pool lacked it.
+     *
+     * @param plans the plans planned so far; not modified
      */
     public synchronized void secondDispatchOnly(List<P> plans) {
         List<T> plannedTrackables = plans.stream().filter(p -> p.getTrackable() != null)
@@ -60,25 +75,49 @@ public abstract class SecondDispatchTrackableAssignment<P
     }
 
     /**
-     * Splits {@code plans} into each returning resource's first run and everything else, narrows the pool to
-     * resources not yet used plus those eligible for a second run, and returns the second-run plans together with
-     * {@code secondDispatch}. Every plan in {@code plans} must already have a trackable assigned.
+     * Separates the first runs of re-dispatched units from the other plans and resets the pool. A first run is a plan
+     * that is not a second run but whose unit is also held by a plan of {@code plans} marked
+     * {@link Planable#isSecondDispatch()}. First runs are left out by identity, so a plan that merely {@code equals} a
+     * first run stays. The new pool is:
+     * <ol>
+     * <li>the units of the expanded fleet ({@link #getTrackables()}) that no plan of {@code plans} holds, in fleet
+     * order, followed by</li>
+     * <li>the unit instances held by the remaining plans (those that are not a first run), in plan order, each unit
+     * once: a unit {@code equals} to one already listed (because several remaining plans hold it) is skipped, so the
+     * instance of the first plan holding it is kept.</li>
+     * </ol>
+     * No eligibility check is made ({@link #supportSecondDispatch} is not consulted), and an earlier
+     * {@link #secondDispatchOnly} narrowing is discarded. Since a first run's unit is also held by its second run,
+     * every unit held in {@code plans} comes back exactly once, so when the plans hold fleet units the pool holds every
+     * unit of the fleet exactly once, with the held units at its end.
+     *
+     * @param plans          the planned plans, each with a trackable; not modified
+     * @param secondDispatch further plans to plan alongside; appended to the result as given
+     * @return a new mutable list: the plans of {@code plans} that are not a first run (the same objects), in their
+     *         order, followed by {@code secondDispatch}
+     * @throws NullPointerException if a plan in {@code plans} has no trackable (the message names the plan)
      */
     public synchronized List<P> secondDispatchAndOthers(List<P> plans, List<P> secondDispatch) {
+        for (P plan : plans) {
+            // a null unit would otherwise enter the pool and fail much later, inside a comparator
+            Objects.requireNonNull(plan.getTrackable(), () -> "Plan " + plan.getCode() + " has no trackable");
+        }
         List<T> secondDispatchTrackables = plans.stream()
                 .filter(p -> p.isSecondDispatch())
                 .map(P::getTrackable)
                 .toList();
-        List<P> firstPlans = plans.stream()
-                .filter(p -> secondDispatchTrackables.contains(p.getTrackable()) && !p.isSecondDispatch())
-                .toList();
-
-        List<P> secondPlans = new ArrayList<>(plans);
-        secondPlans.removeAll(firstPlans);
+        // first runs are left out by position, never through Planable#equals
+        List<P> secondPlans = plans.stream()
+                .filter(p -> p.isSecondDispatch() || !secondDispatchTrackables.contains(p.getTrackable()))
+                .collect(Collectors.toList());
 
         List<T> allTrackables = new ArrayList<>(trackables);
         allTrackables.removeIf(t -> plans.stream().anyMatch(p -> t.equals(p.getTrackable())));
-        allTrackables.addAll(secondPlans.stream().map(P::getTrackable).toList());
+        for (P plan : secondPlans) {
+            if (!allTrackables.contains(plan.getTrackable())) {
+                allTrackables.add(plan.getTrackable());
+            }
+        }
         currentTrackables = allTrackables;
 
         secondPlans.addAll(secondDispatch);
@@ -86,7 +125,14 @@ public abstract class SecondDispatchTrackableAssignment<P
     }
 
     /**
-     * Whether {@code trackable} may stay in the pool: not used by {@code plans}, or returning and dispatchable twice.
+     * Whether {@code trackable} may stay in the pool built by {@link #secondDispatchOnly}.
+     *
+     * <p>By default: no plan of {@code plans} holds it, or it {@link Trackable#isReturns() returns} and
+     * {@link Trackable#isSupportSecondDispatch() supports a second dispatch}.
+     *
+     * @param plans     the plans passed to {@link #secondDispatchOnly}
+     * @param trackable a unit of the new pool
+     * @return {@code true} to keep the unit
      */
     protected boolean supportSecondDispatch(List<P> plans, T trackable) {
         return plans.stream().noneMatch(p -> trackable.equals(p.getTrackable()))
@@ -94,7 +140,12 @@ public abstract class SecondDispatchTrackableAssignment<P
     }
 
     /**
-     * The unit of {@code plan} as it enters its second run; a copy by default.
+     * The unit of {@code plan} as it enters the pool for its second run in {@link #secondDispatchOnly}; must be
+     * {@code equals} to the plan's unit, since the pool and {@link #supportSecondDispatch} compare by {@code equals}.
+     * By default a {@link Trackable#copy()} of the plan's unit.
+     *
+     * @param plan a plan holding a trackable
+     * @return the unit to put into the pool
      */
     protected T getTrackableForSecondDispatch(P plan) {
         return plan.getTrackable().copy();
