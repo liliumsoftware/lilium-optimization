@@ -16,6 +16,7 @@
 
 package com.github.liliumsoftware.optimization.localsearch;
 
+import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.feasibility.FeasibilityChecker;
 import com.github.liliumsoftware.optimization.feasibility.FeasibilityResult;
 import com.github.liliumsoftware.optimization.support.AlwaysFeasibleChecker;
@@ -24,6 +25,7 @@ import com.github.liliumsoftware.optimization.support.PlanInvariants;
 import com.github.liliumsoftware.optimization.support.TestNode;
 import com.github.liliumsoftware.optimization.support.TestOpenTwoOpt;
 import com.github.liliumsoftware.optimization.support.TestPlan;
+import com.github.liliumsoftware.optimization.support.TestTwoOpt;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -52,17 +54,47 @@ class OpenTwoOptTest {
     private final TestNode b = TestNode.customer("B", 0, 20, 1);
     private final TestNode c = TestNode.customer("C", 0, 30, 1);
 
+    /**
+     * Independent local-optimum oracle for an open plan: none of the three candidates the open 2-opt builds for a
+     * customer position {@code i} and a cut {@code j} (reverse {@code [i, j)}; move {@code [i, j)} behind the tail;
+     * move it behind the reversed tail) is cheaper under the Manhattan reference cost.
+     */
+    private static void assertNoCandidateMoveIsCheaper(List<TestNode> nodes, long seed) {
+        long cost = PlanInvariants.referenceCost(nodes);
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).getType() != Nodeable.Type.CUSTOMER) {
+                continue;
+            }
+            for (int j = i + 2; j <= nodes.size(); j++) {
+                List<TestNode> head = nodes.subList(0, i);
+                List<TestNode> segment = nodes.subList(i, j);
+                List<TestNode> tail = nodes.subList(j, nodes.size());
+                List<TestNode> reversedSegment = new ArrayList<>(segment);
+                Collections.reverse(reversedSegment);
+                List<TestNode> reversedTail = new ArrayList<>(tail);
+                Collections.reverse(reversedTail);
+                for (List<List<TestNode>> parts : List.of(List.of(head, reversedSegment, tail),
+                        List.of(head, tail, segment), List.of(head, reversedTail, segment))) {
+                    List<TestNode> candidate = new ArrayList<>();
+                    parts.forEach(candidate::addAll);
+                    assertThat(PlanInvariants.referenceCost(candidate))
+                            .as("candidate %s of %s (seed %d)", candidate, nodes, seed).isGreaterThanOrEqualTo(cost);
+                }
+            }
+        }
+    }
+
     private MatrixCostCalculation calc(List<TestNode> nodes) {
         MatrixCostCalculation calculation = new MatrixCostCalculation();
         calculation.initializeCostMatrix(nodes);
         return calculation;
     }
 
+    // ---------------------------------------------------------------- known examples
+
     private TestOpenTwoOpt twoOpt(MatrixCostCalculation calculation) {
         return new TestOpenTwoOpt(calculation, new AlwaysFeasibleChecker());
     }
-
-    // ---------------------------------------------------------------- known examples
 
     @Test
     void reversesAnInvertedPairIntoTheCheaperOrder() {
@@ -98,6 +130,8 @@ class OpenTwoOptTest {
         assertThat(result).as("no improvement means the very same instance comes back").isSameAs(plan);
     }
 
+    // ---------------------------------------------------------------- structure
+
     @Test
     void theLastStopMayChangeWhenThereIsNoDestination() {
         // This is the whole point of the open variant: a plain closed 2-opt pins the final node, which on an
@@ -111,8 +145,6 @@ class OpenTwoOptTest {
         assertThat(result.getNodes()).containsExactlyInAnyOrder(origin, a, b, c);
         assertThat(result.getNodes().getFirst()).isEqualTo(origin);
     }
-
-    // ---------------------------------------------------------------- structure
 
     @Test
     void aDestinationStaysPinnedToTheEnd() {
@@ -172,6 +204,8 @@ class OpenTwoOptTest {
         assertThat(twoOpt(calculation).apply(plan).getNodes().getFirst()).isEqualTo(origin);
     }
 
+    // ---------------------------------------------------------------- degenerate sizes
+
     @Test
     void theAssignedResourceSurvivesAMove() {
         MatrixCostCalculation calculation = calc(List.of(origin, a, b));
@@ -183,8 +217,6 @@ class OpenTwoOptTest {
         assertThat(result.getNodes()).containsExactly(origin, a, b);
         assertThat(result.getTrackable()).as("a local-search move must not unassign the plan").isNotNull();
     }
-
-    // ---------------------------------------------------------------- degenerate sizes
 
     @Test
     void routesTooShortToReorderComeBackUnchanged() {
@@ -199,6 +231,8 @@ class OpenTwoOptTest {
         assertThat(twoOpt(calculation).apply(twoCustomers).getNodes()).containsExactly(origin, a, b);
     }
 
+    // ---------------------------------------------------------------- feasibility gating
+
     @Test
     void zeroLengthEdgesLeaveNothingToImprove() {
         TestNode first = TestNode.customer("A", 5, 5, 1);
@@ -212,7 +246,7 @@ class OpenTwoOptTest {
         assertThat(result.getNodes()).containsExactlyInAnyOrder(origin, first, second);
     }
 
-    // ---------------------------------------------------------------- feasibility gating
+    // ---------------------------------------------------------------- relocation candidates
 
     @Test
     void anImprovingButInfeasibleMoveIsRefused() {
@@ -249,6 +283,135 @@ class OpenTwoOptTest {
 
         assertThat(result.getNodes()).containsExactly(origin, b, a);
         assertThat(PlanInvariants.referenceCost(result)).isEqualTo(30);
+    }
+
+    @Test
+    void movingASegmentBehindTheTailImprovesWhereNoReversalDoes() {
+        // O(0,0) A(-10,-10) B(-10,0) C(10,0) D(10,-10) in the order O A B C D costs 20 + 10 + 20 + 10 = 60, and no
+        // reversal of a segment is cheaper (the closed 2-opt keeps it). Moving [A, B] behind the tail gives O C D A B
+        // = 10 + 10 + 20 + 10 = 50, which nothing improves further.
+        TestNode first = TestNode.customer("A", -10, -10, 1);
+        TestNode second = TestNode.customer("B", -10, 0, 1);
+        TestNode third = TestNode.customer("C", 10, 0, 1);
+        TestNode fourth = TestNode.customer("D", 10, -10, 1);
+        MatrixCostCalculation calculation = calc(List.of(origin, first, second, third, fourth));
+        TestPlan plan = new TestPlan("p", List.of(origin, first, second, third, fourth));
+
+        TestPlan reversalsOnly = new TestTwoOpt(calculation, new AlwaysFeasibleChecker()).apply(plan.copy());
+        TestPlan result = twoOpt(calculation).apply(plan);
+
+        assertThat(PlanInvariants.referenceCost(reversalsOnly)).isEqualTo(60);
+        assertThat(result.getNodes()).containsExactly(origin, third, fourth, first, second);
+        assertThat(PlanInvariants.referenceCost(result)).isEqualTo(50);
+    }
+
+    @Test
+    void movingASegmentBehindTheReversedTailImprovesWhereNeitherReversalNorPlainMoveDoes() {
+        // O(0,0) A(10,0) B(20,0) C(10,10) D(0,10) in the order O A B C D costs 10 + 10 + 20 + 10 = 50. No reversal and
+        // no plain move of a segment behind the tail is cheaper; [A, B] behind the reversed tail [D, C] gives the
+        // loop O D C A B = 10 + 10 + 10 + 10 = 40.
+        TestNode first = TestNode.customer("A", 10, 0, 1);
+        TestNode second = TestNode.customer("B", 20, 0, 1);
+        TestNode third = TestNode.customer("C", 10, 10, 1);
+        TestNode fourth = TestNode.customer("D", 0, 10, 1);
+        MatrixCostCalculation calculation = calc(List.of(origin, first, second, third, fourth));
+        TestPlan plan = new TestPlan("p", List.of(origin, first, second, third, fourth));
+
+        TestPlan reversalsOnly = new TestTwoOpt(calculation, new AlwaysFeasibleChecker()).apply(plan.copy());
+        TestPlan result = twoOpt(calculation).apply(plan);
+
+        assertThat(PlanInvariants.referenceCost(reversalsOnly)).isEqualTo(50);
+        assertThat(result.getNodes()).containsExactly(origin, fourth, third, first, second);
+        assertThat(PlanInvariants.referenceCost(result)).isEqualTo(40);
+    }
+
+    // ---------------------------------------------------------------- one step, three candidates
+
+    @Test
+    void anInfeasibleRelocationIsRefusedLikeAnInfeasibleReversal() {
+        // The two instances above, with a checker that refuses everything: the cheaper relocated plans are proposed
+        // and refused, so the input comes back as the very same instance.
+        List<List<TestNode>> instances = List.of(
+                List.of(origin, TestNode.customer("A", -10, -10, 1), TestNode.customer("B", -10, 0, 1),
+                        TestNode.customer("C", 10, 0, 1), TestNode.customer("D", 10, -10, 1)),
+                List.of(origin, TestNode.customer("A", 10, 0, 1), TestNode.customer("B", 20, 0, 1),
+                        TestNode.customer("C", 10, 10, 1), TestNode.customer("D", 0, 10, 1)));
+        for (List<TestNode> nodes : instances) {
+            MatrixCostCalculation calculation = calc(nodes);
+            int[] refused = new int[1];
+            FeasibilityChecker<TestPlan> never = new FeasibilityChecker<>() {
+                @Override
+                public FeasibilityResult getResult(TestPlan plan) {
+                    refused[0]++;
+                    return new FeasibilityResult() {
+                        @Override
+                        public String getCause() {
+                            return "never";
+                        }
+
+                        @Override
+                        public Object[] getParams() {
+                            return new Object[0];
+                        }
+                    };
+                }
+
+                @Override
+                public String getMessage(String key, Object... params) {
+                    return key;
+                }
+            };
+            TestPlan plan = new TestPlan("p", nodes);
+
+            assertThat(new TestOpenTwoOpt(calculation, never).apply(plan)).isSameAs(plan);
+            assertThat(plan.getNodes()).containsExactlyElementsOf(nodes);
+            assertThat(refused[0]).as("the cheaper relocation was proposed").isPositive();
+        }
+    }
+
+    /**
+     * {@code O(0,0) A(10,30) B(0,20) C(40,10) D(0,10)}, starting from {@code [O, A, B, C, D]} = 40 + 20 + 50 + 40
+     * = 150. The first step is {@code (i, j) = (1, 3)}, segment {@code [A, B]}: the reversal {@code [O, B, A, C, D]}
+     * costs 130, the relocation {@code [O, C, D, A, B]} 140, and the reversed tail in front of the segment
+     * {@code [O, D, C, A, B]} 120.
+     */
+    private List<TestNode> fivePointRoute(TestNode a, TestNode b, TestNode c, TestNode d) {
+        return List.of(origin, a, b, c, d);
+    }
+
+    @Test
+    void allThreeCandidatesOfAStepAreBuiltFromTheSamePlanAndTheCheapestWins() {
+        TestNode a = TestNode.customer("A", 10, 30, 1);
+        TestNode b = TestNode.customer("B", 0, 20, 1);
+        TestNode c = TestNode.customer("C", 40, 10, 1);
+        TestNode d = TestNode.customer("D", 0, 10, 1);
+        MatrixCostCalculation calculation = calc(List.of(origin, a, b, c, d));
+        RecordingOpenTwoOpt twoOpt = new RecordingOpenTwoOpt(calculation);
+
+        twoOpt.apply(new TestPlan("p", fivePointRoute(a, b, c, d)));
+
+        // The third candidate is built from the input, not from the reversal the first candidate produced (which would
+        // give [O, D, C, B, A]), and of the three improving candidates the cheapest, the third (120), is taken.
+        assertThat(twoOpt.candidates.subList(0, 4)).containsExactly(List.of("O", "B", "A", "C", "D"),
+                List.of("O", "C", "D", "A", "B"), List.of("O", "D", "C", "A", "B"), List.of("O", "C", "D", "A", "B"));
+    }
+
+    @Test
+    void keepingTheCheapestCandidateOfEachStepReachesTheOptimumOfTheFivePointRoute() {
+        // From [O, D, C, A, B] (120) the search continues to [O, D, B, A, C] = 10 + 10 + 20 + 40 = 90, the brute-force
+        // optimum. Building the third candidate from the first one instead takes [O, D, C, B, A] (120) and ends at
+        // [O, B, A, D, C] (110).
+        TestNode a = TestNode.customer("A", 10, 30, 1);
+        TestNode b = TestNode.customer("B", 0, 20, 1);
+        TestNode c = TestNode.customer("C", 40, 10, 1);
+        TestNode d = TestNode.customer("D", 0, 10, 1);
+        MatrixCostCalculation calculation = calc(List.of(origin, a, b, c, d));
+
+        TestPlan result = twoOpt(calculation).apply(new TestPlan("p", fivePointRoute(a, b, c, d)));
+
+        assertThat(result.getNodes()).containsExactly(origin, d, b, a, c);
+        assertThat(PlanInvariants.referenceCost(result)).isEqualTo(90)
+                .isEqualTo(bruteForceOptimum(List.of(a, b, c, d)));
     }
 
     // ---------------------------------------------------------------- invariants over random instances
@@ -291,6 +454,7 @@ class OpenTwoOptTest {
 
             // A local optimum: running again cannot improve further, and it terminates rather than oscillating.
             assertThat(PlanInvariants.referenceCost(twoOpt.apply(result.copy()))).isEqualTo(after);
+            assertNoCandidateMoveIsCheaper(result.getNodes(), seed);
         }
     }
 
@@ -323,6 +487,25 @@ class OpenTwoOptTest {
             }
         }
         return result;
+    }
+
+    /**
+     * Open 2-opt that records the stop order of every candidate it builds.
+     */
+    private static final class RecordingOpenTwoOpt extends AbstractOpenTwoOptAlgorithm<TestPlan, TestNode> {
+
+        private final List<List<String>> candidates = new ArrayList<>();
+
+        private RecordingOpenTwoOpt(MatrixCostCalculation calculation) {
+            super(calculation, new AlwaysFeasibleChecker());
+        }
+
+        @Override
+        protected TestPlan getPlan(TestPlan plan, List<TestNode> nodes) {
+            candidates.add(nodes.stream().map(TestNode::getCode).toList());
+            return plan.withNodes(nodes);
+        }
+
     }
 
 }
