@@ -19,6 +19,7 @@ package com.github.liliumsoftware.optimization.localsearch;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.feasibility.FeasibilityChecker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,23 +29,56 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 2-opt variant for open (non-returning) plans, where the destination — if any — must stay last. For each
- * position pair it evaluates three reconnection moves (segment reversal, segment move, and reversed move)
- * and keeps the cheapest one that beats the current plan and is feasible, restarting the scan on improvement. Because
- * an open path has no closing edge, the plain reversal alone would miss improvements the two relocation variants
- * catch.
+ * 2-opt variant for open (non-returning) plans, where the destination, if any, must stay last. Because an open path
+ * has no closing edge, a plain reversal misses improvements that moving a segment to the end of the path catches, so
+ * for every position pair {@code (i, j)} admitted by {@link #supports(Planable, int, int)} three candidates are
+ * evaluated, all built from the node order of the same current best plan:
+ * <ol>
+ *   <li>the segment {@code [i, j)} reversed in place;</li>
+ *   <li>the segment {@code [i, j)} moved to the end of the path (in front of the destination, if any);</li>
+ *   <li>the tail {@code [j, end)} reversed and placed in front of the segment {@code [i, j)}, which again ends the
+ *       path.</li>
+ * </ol>
+ * Of the candidates that are strictly cheaper than that plan and feasible, the step keeps the cheapest (the earliest in
+ * the order above on ties). After a step that accepted a candidate the scan restarts from the top (first improvement);
+ * it ends when a full pass accepts nothing. The outer position {@code i} runs over the plan's stops
+ * ({@code 0 <= i < getCount()}) and {@code j} from {@code i + 2} up to the end of the path (in front of the
+ * destination, if any).
+ *
+ * <p>Candidates are costed with {@link PathCostCalculation#calculateCost(Planable)
+ * costCalculation.calculateCost(plan)} (not {@link Planable#getCost()}) and built by {@link #getPlan} on fresh
+ * {@link Planable#copy() copies}, so the plan passed to {@link #apply(Planable)} is never modified. {@link #cancel()}
+ * aborts with a {@link CancelException}; {@link #interrupt()} is polled at every step of the outer loop and returns
+ * the best plan found so far (at worst the input). The class holds no mutable state beyond the signal flags, so one
+ * instance may improve independent plans concurrently.
+ *
+ * @param <P> the plan type
+ * @param <N> the node type
  */
 @Slf4j
 @RequiredArgsConstructor
 public abstract class AbstractOpenTwoOptAlgorithm<P
         extends Planable<P, N, ?>, N extends Nodeable<N>> extends LocalSearchAlgorithm<P> {
 
+    /**
+     * Costs every candidate; its matrix must contain every stop of the plans to improve.
+     */
     protected final PathCostCalculation<P, N, ?> costCalculation;
+    /**
+     * Judges every cheaper candidate; only feasible candidates are accepted.
+     */
     protected final FeasibilityChecker<P> feasibilityChecker;
 
     /**
-     * Improves {@code plan} by reversal and relocation moves until no move is both cheaper and feasible; returns
-     * the input when {@link #supports(Planable)} rejects it or nothing improves.
+     * Improves {@code plan} by reversal and relocation moves (see the class description) until a full pass accepts no
+     * candidate, or until {@link #interrupt()} is observed.
+     *
+     * @param plan the plan to improve; not modified
+     * @return the best plan found: {@code plan} itself when {@link #supports(Planable)} rejects it or nothing improves
+     *         it, otherwise a plan returned by {@link #getPlan}
+     * @throws CancelException       if the search was cancelled or the running thread interrupted
+     * @throws ArithmeticException   if a plan's cost does not fit a {@code long}
+     * @throws IllegalStateException if the cost matrix is uninitialized or lacks a stop of the plan
      */
     public P apply(P plan) {
         if (!this.supports(plan)) {
@@ -53,38 +87,30 @@ public abstract class AbstractOpenTwoOptAlgorithm<P
         P bestPlan = plan;
         long bestCost = costCalculation.calculateCost(bestPlan);
         N destination = plan.getDestination();
-        for (int i = 0; i <= bestPlan.getCount(); i++) {
+        for (int i = 0; i < bestPlan.getCount(); i++) {
+            // Improvement, not construction: an interrupt keeps the best plan found so far (at worst the input).
+            if (isInterrupted()) {
+                break;
+            }
             for (int j = i + 2; j <= (destination == null ? bestPlan.getCount() : bestPlan.getCount() - 1); j++) {
                 checkCancel();
                 if (!this.supports(bestPlan, i, j)) {
                     continue;
                 }
+                // All three candidates of a step are built from the same snapshot of the current best plan, and the
+                // cheapest feasible one that improves on it wins (the earliest on ties). Each is built from its own
+                // copy, so getPlan may rebuild the plan it is given in place (as twoOptSwap may in the closed variant)
+                // without touching the caller's plan or the other candidates.
+                P snapshot = bestPlan;
                 boolean found = false;
-                // Each candidate is built from its own copy, so getPlan may rebuild the plan it is given in place
-                // (as twoOptSwap may in the closed variant) without touching the caller's plan or the other candidates.
-                P newPlan1 = this.getPlan(bestPlan.copy(), plan1(bestPlan.copy(), i, j));
-                P newPlan2 = this.getPlan(bestPlan.copy(), plan2(bestPlan.copy(), i, j));
-
-                long newCost = costCalculation.calculateCost(newPlan1);
-                if (newCost < bestCost && feasibilityChecker.getResult(newPlan1).isFeasible()) {
-                    bestPlan = newPlan1;
-                    bestCost = newCost;
-                    found = true;
-                }
-
-                newCost = costCalculation.calculateCost(newPlan2);
-                if (newCost < bestCost && feasibilityChecker.getResult(newPlan2).isFeasible()) {
-                    bestPlan = newPlan2;
-                    bestCost = newCost;
-                    found = true;
-                }
-
-                P newPlan3 = this.getPlan(bestPlan.copy(), plan3(bestPlan.copy(), i, j));
-                newCost = costCalculation.calculateCost(newPlan3);
-                if (newCost < bestCost && feasibilityChecker.getResult(newPlan3).isFeasible()) {
-                    bestPlan = newPlan3;
-                    bestCost = newCost;
-                    found = true;
+                for (int move = 1; move <= 3; move++) {
+                    P newPlan = this.getPlan(snapshot.copy(), candidate(move, snapshot.copy(), i, j));
+                    long newCost = costCalculation.calculateCost(newPlan);
+                    if (newCost < bestCost && feasibilityChecker.getResult(newPlan).isFeasible()) {
+                        bestPlan = newPlan;
+                        bestCost = newCost;
+                        found = true;
+                    }
                 }
 
                 if (found) {
@@ -98,10 +124,25 @@ public abstract class AbstractOpenTwoOptAlgorithm<P
     }
 
     /**
-     * The candidate plan with {@code nodes} as its stops; {@code plan} is a fresh copy of the current best plan, so an
-     * implementation may rebuild and return it in place.
+     * Builds the candidate plan whose stops are {@code nodes}, in that order. The returned plan is costed with
+     * {@code costCalculation.calculateCost(plan)} and, when accepted, becomes the current best plan, so it must keep
+     * the plan's resource, zone and any other state the domain relies on.
+     *
+     * @param plan  a fresh copy of the current best plan, owned by this call: the implementation may rebuild and return
+     *              it in place
+     * @param nodes the candidate stop order, a new list built from another copy of the current best plan (its
+     *              destination, if any, last)
+     * @return the candidate plan
      */
     protected abstract P getPlan(P plan, List<N> nodes);
+
+    private List<N> candidate(int move, P plan, int i, int j) {
+        return switch (move) {
+            case 1 -> plan1(plan, i, j);
+            case 2 -> plan2(plan, i, j);
+            default -> plan3(plan, i, j);
+        };
+    }
 
     private List<N> plan1(P plan, int i, int j) {
         List<N> nodes = new ArrayList<>(plan.getNodes().subList(0, i));

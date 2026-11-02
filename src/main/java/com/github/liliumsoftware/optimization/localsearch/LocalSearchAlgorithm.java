@@ -19,31 +19,66 @@ package com.github.liliumsoftware.optimization.localsearch;
 import com.github.liliumsoftware.optimization.BaseAlgorithm;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 
 /**
- * Base for intra-plan improvement: {@link #apply(Planable)} returns an equal-or-better ordering of a single
- * plan's stops. Every construction and inter-plan move funnels touched plans through an implementation of
- * this type, so a no-op default ({@code apply} returning the input) is a valid identity local search.
+ * Base for intra-plan improvement: {@link #apply(Planable)} returns an equal-or-better ordering of a single plan's
+ * stops. Clarke-Wright, exchange/relocate, destroy-repair, merge and un-merge funnel every plan they touch through an
+ * implementation of this type, so it is the single place where a consumer plugs in route improvement (for example
+ * {@link AbstractTwoOptAlgorithm} or {@link AbstractOpenTwoOptAlgorithm}). An implementation whose {@code apply}
+ * returns its argument unchanged is a valid identity local search.
+ *
+ * <p><strong>Contract.</strong> {@code apply} must not modify its argument: it returns either a new plan (typically an
+ * improved copy) or the argument itself, untouched. Callers rely on this: destroy-repair, for instance, runs the local
+ * search over the plan objects of the caller's list when no move was accepted, and the library promises that the
+ * caller's plan objects are never modified. Implementations should honour {@link #cancel()} (through
+ * {@link #checkCancel()}) and {@link #interrupt()} (returning the best plan found so far) inside their loops; the
+ * composite algorithms forward both signals to their local search.
+ *
+ * <p><strong>Thread-safety.</strong> Implementations should hold no mutable state beyond the two signal flags of
+ * {@link BaseAlgorithm}, so that one instance may improve independent plans concurrently (the library calls it from
+ * parallel zone groups and from the parallel Clarke-Wright sweep).
+ *
+ * @param <P> the plan type
  */
 public abstract class LocalSearchAlgorithm<P extends Planable<P, ?, ?>> extends BaseAlgorithm {
 
     /**
-     * Improves {@code plan}.
+     * Creates a local search with both signals cleared.
+     */
+    public LocalSearchAlgorithm() {
+    }
+
+    /**
+     * Improves the stop order of {@code plan}.
      *
-     * @return a plan no worse than {@code plan}; may be {@code plan} itself if no improvement is found
+     * @param plan the plan to improve; must not be modified
+     * @return a plan no worse than {@code plan}, or {@code plan} itself when no improvement is found or
+     *         {@link #supports(Planable)} rejects it
+     * @throws CancelException if the search was cancelled
      */
     public abstract P apply(P plan);
 
     /**
-     * Whether this search applies to {@code plan} at all; {@code true} by default.
+     * Whether this search applies to {@code plan} at all; the implementations in this package return an unsupported
+     * plan unchanged. The default implementation returns {@code true}.
+     *
+     * @param plan the plan about to be improved
+     * @return {@code true} if {@link #apply(Planable)} may work on {@code plan}
      */
     protected boolean supports(P plan) {
         return true;
     }
 
     /**
-     * Whether the move defined by positions {@code i} and {@code j} may be tried; by default only when the node at
-     * {@code i} is a customer (depots never move).
+     * Whether the move defined by positions {@code i} and {@code j} of {@code plan} may be tried; the 2-opt variants
+     * ask it for every position pair before building a candidate. The default implementation returns {@code true}
+     * only when the node at {@code i} is a {@link Nodeable.Type#CUSTOMER} (depots never move).
+     *
+     * @param plan the current best plan
+     * @param i    the first position of the move
+     * @param j    the second (exclusive end) position of the move
+     * @return {@code true} if the move may be evaluated
      */
     protected boolean supports(P plan, int i, int j) {
         return plan.getNodes().get(i).getType() == Nodeable.Type.CUSTOMER;

@@ -16,8 +16,10 @@
 
 package com.github.liliumsoftware.optimization.localsearch;
 
+import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.support.AlwaysFeasibleChecker;
 import com.github.liliumsoftware.optimization.support.MatrixCostCalculation;
+import com.github.liliumsoftware.optimization.support.PlanInvariants;
 import com.github.liliumsoftware.optimization.support.TestNode;
 import com.github.liliumsoftware.optimization.support.TestPlan;
 import com.github.liliumsoftware.optimization.support.TestTwoOpt;
@@ -26,6 +28,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -36,6 +39,29 @@ import static org.assertj.core.api.Assertions.assertThat;
  * a valid permutation, must be a local optimum (idempotent), and must never beat the brute-force optimum.
  */
 class TwoOptTest {
+
+    /**
+     * Independent local-optimum oracle: no reversal of a segment {@code [i, j)} that starts at a customer (the moves
+     * the closed 2-opt tries on an open plan, {@code j} up to the end) is cheaper under the Manhattan reference cost.
+     * The idempotence check alone would also pass for a 2-opt that never moves anything.
+     */
+    private static void assertNoSingleReversalIsCheaper(List<TestNode> nodes, long seed) {
+        long cost = PlanInvariants.referenceCost(nodes);
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i).getType() != Nodeable.Type.CUSTOMER) {
+                continue;
+            }
+            for (int j = i + 2; j <= nodes.size(); j++) {
+                List<TestNode> reversed = new ArrayList<>(nodes.subList(0, i));
+                List<TestNode> segment = new ArrayList<>(nodes.subList(i, j));
+                Collections.reverse(segment);
+                reversed.addAll(segment);
+                reversed.addAll(nodes.subList(j, nodes.size()));
+                assertThat(PlanInvariants.referenceCost(reversed))
+                        .as("reversing [%d, %d) of %s (seed %d)", i, j, nodes, seed).isGreaterThanOrEqualTo(cost);
+            }
+        }
+    }
 
     private MatrixCostCalculation calc(List<TestNode> nodes) {
         MatrixCostCalculation calc = new MatrixCostCalculation();
@@ -137,7 +163,7 @@ class TwoOptTest {
             all.addAll(customers);
 
             List<TestNode> shuffled = new ArrayList<>(customers);
-            java.util.Collections.shuffle(shuffled, random);
+            Collections.shuffle(shuffled, random);
             List<TestNode> initial = new ArrayList<>();
             initial.add(origin);
             initial.addAll(shuffled);
@@ -156,9 +182,10 @@ class TwoOptTest {
                     .containsExactlyInAnyOrderElementsOf(initial);
             assertThat(result.getNodes().getFirst()).isEqualTo(origin);   // endpoint preserved
 
-            // Local optimum: a second pass cannot improve further.
+            // Local optimum: a second pass cannot improve further, and no reversal the search may try is cheaper.
             TestPlan again = twoOpt.apply(result.copy());
             assertThat(tourCost(calc, again.getNodes())).isEqualTo(after);
+            assertNoSingleReversalIsCheaper(result.getNodes(), seed);
         }
     }
 
