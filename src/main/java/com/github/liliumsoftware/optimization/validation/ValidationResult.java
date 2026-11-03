@@ -17,17 +17,23 @@
 package com.github.liliumsoftware.optimization.validation;
 
 /**
- * A single reason a node failed pre-planning validation: a message {@code cause} key plus its {@code params}.
+ * A single reason a node failed pre-planning validation: a message {@link #getCause() cause} key plus its
+ * {@link #getParams() params}, reported by {@link ValidationChecker}'s per-node {@code validate} hook and resolved to
+ * text with {@link ValidationChecker}'s {@code getMessage}.
  */
 public interface ValidationResult {
 
     /**
      * Message key of the violated rule.
+     *
+     * @return the key
      */
     String getCause();
 
     /**
-     * Message parameters for {@link #getCause()}; never {@code null}.
+     * Message parameters for {@link #getCause()}.
+     *
+     * @return the parameters; should never be {@code null} (use an empty array)
      */
     Object[] getParams();
 

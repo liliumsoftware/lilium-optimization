@@ -18,7 +18,6 @@ package com.github.liliumsoftware.optimization.validation;
 
 import com.github.liliumsoftware.optimization.domain.InvalidNodeable;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
@@ -27,28 +26,32 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Partitions raw nodes into valid ({@code getValidNodes()}) and invalid ({@code getInvalidNodes()}) sets
+ * Partitions raw nodes into valid ({@link #getValidNodes()}) and invalid ({@link #getInvalidNodes()}) sets
  * <em>before</em> planning begins, so structurally unplannable customers are filtered out up front rather
  * than repeatedly rejected inside the hot search loops. A node accumulating no {@link ValidationResult}s is
  * valid; otherwise it is converted to an {@link InvalidNodeable} carrying its causes.
  *
  * <p>Stateful by design: each {@link #validate(List)} replaces the partition returned by the getters. The method
- * is synchronized, the partition is built completely before it is published through volatile fields, and the
- * published lists are unmodifiable, so a shared instance never exposes a half-built or externally mutated
- * partition. Callers that need several partitions at once should still use one instance per run.
+ * is synchronized, the partition is built completely before it is published, and both lists are published together
+ * through a single volatile reference, so a reader on another thread sees the valid and invalid nodes of the same
+ * run, never the valid nodes of one run with the invalid nodes of another. The published lists are unmodifiable.
+ * Callers that need several partitions at once should still use one instance per run.
  *
  * @param <N> the input node type
  * @param <I> the invalid-node type produced for rejected nodes
  */
 @RequiredArgsConstructor
-@Getter
 public abstract class ValidationChecker<N extends Nodeable<N>, I extends InvalidNodeable<I>> {
 
-    private volatile List<N> validNodes;
-    private volatile List<I> invalidNodes;
+    private volatile Partition<N, I> partition;
 
     /**
-     * Runs {@link #validate(Nodeable, Consumer)} over every node, populating the valid/invalid partitions.
+     * Runs {@link #validate(Nodeable, Consumer)} over every node, in order, converts each rejected node with
+     * {@link #toInvalidNode}, and publishes the resulting valid/invalid partition, replacing the previous one. The
+     * hooks run while this instance's lock is held. If a hook throws, the previous partition stays published.
+     *
+     * @param nodes the nodes to check; not modified
+     * @throws NullPointerException if {@code nodes} is {@code null}
      */
     public synchronized void validate(List<N> nodes) {
         List<N> valid = new ArrayList<>();
@@ -62,17 +65,44 @@ public abstract class ValidationChecker<N extends Nodeable<N>, I extends Invalid
                 invalid.add(toInvalidNode(node, results));
             }
         }
-        validNodes = Collections.unmodifiableList(valid);
-        invalidNodes = Collections.unmodifiableList(invalid);
+        partition = new Partition<>(Collections.unmodifiableList(valid), Collections.unmodifiableList(invalid));
     }
 
     /**
-     * Checks one node, handing every violated rule to {@code consumer}; no call means the node is valid.
+     * Checks one node, handing every violated rule to {@code consumer}; no call means the node is valid. Called once
+     * per node by {@link #validate(List)}.
+     *
+     * @param node     the node to check
+     * @param consumer receives one {@link ValidationResult} per violated rule
      */
     protected abstract void validate(N node, Consumer<ValidationResult> consumer);
 
     /**
-     * Resolves one result to its user-facing message.
+     * The nodes the last {@link #validate(List)} accepted, in input order.
+     *
+     * @return an unmodifiable list, or {@code null} before the first {@link #validate(List)}
+     */
+    public List<N> getValidNodes() {
+        Partition<N, I> current = partition;
+        return current == null ? null : current.valid();
+    }
+
+    /**
+     * The invalid-node conversions of the nodes the last {@link #validate(List)} rejected, in input order.
+     *
+     * @return an unmodifiable list, or {@code null} before the first {@link #validate(List)}
+     */
+    public List<I> getInvalidNodes() {
+        Partition<N, I> current = partition;
+        return current == null ? null : current.invalid();
+    }
+
+    /**
+     * Resolves one result to its user-facing message through {@link #getMessage(String, Object...)}. Not called by
+     * this class; a convenience for {@link #toInvalidNode} implementations.
+     *
+     * @param result a violated rule
+     * @return the message for {@code result}
      */
     protected String getCause(ValidationResult result) {
         return getMessage(result.getCause(), result.getParams());
@@ -80,12 +110,26 @@ public abstract class ValidationChecker<N extends Nodeable<N>, I extends Invalid
 
     /**
      * Converts a rejected node and its violations into the invalid-node type.
+     *
+     * @param node    the rejected node
+     * @param results every rule it violated, in the order {@link #validate(Nodeable, Consumer)} reported them
+     * @return the invalid-node conversion of {@code node}
      */
     protected abstract I toInvalidNode(N node, List<ValidationResult> results);
 
     /**
-     * Resolves a message key and parameters to text.
+     * Resolves a message key and parameters to text (for example through a message bundle).
+     *
+     * @param key    the message key
+     * @param params the message parameters
+     * @return the resolved message
      */
     protected abstract String getMessage(String key, Object... params);
+
+    /**
+     * One complete, immutable validation result.
+     */
+    private record Partition<N, I>(List<N> valid, List<I> invalid) {
+    }
 
 }

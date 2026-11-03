@@ -19,10 +19,12 @@ package com.github.liliumsoftware.optimization.validation;
 import com.github.liliumsoftware.optimization.support.TestInvalidNode;
 import com.github.liliumsoftware.optimization.support.TestNode;
 import com.github.liliumsoftware.optimization.support.TestValidation;
+import com.github.liliumsoftware.optimization.support.TestValidationResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -126,6 +128,79 @@ class ValidationCheckerTest {
         checker.validate(List.of(TestNode.customer("C", 0, 3, 1)));
         assertThat(valid).extracting(TestNode::getCode).containsExactly("A", "B");
         assertThat(checker.getValidNodes()).extracting(TestNode::getCode).containsExactly("C");
+    }
+
+    @Test
+    void afterTwoRunsBothGettersReflectTheSecondRun() {
+        // Each run has a valid and an invalid node, with different codes, so a getter still showing the first run
+        // (or a mix of the two) fails.
+        validation.validate(List.of(TestNode.customer("v1", 0, 1, 1), TestNode.customer("i1", 0, 2, 0)));
+        validation.validate(List.of(TestNode.customer("i2", 0, 3, 0), TestNode.customer("v2", 0, 4, 1),
+                TestNode.customer("v3", 0, 5, 2)));
+
+        assertThat(validation.getValidNodes()).extracting(TestNode::getCode).containsExactly("v2", "v3");
+        assertThat(validation.getInvalidNodes()).extracting(TestInvalidNode::getCode).containsExactly("i2");
+    }
+
+    @Test
+    void bothPublishedListsRejectEveryKindOfModification() {
+        validation.validate(List.of(TestNode.customer("v", 0, 1, 1), TestNode.customer("i", 0, 2, 0)));
+        List<TestNode> valid = validation.getValidNodes();
+        List<TestInvalidNode> invalid = validation.getInvalidNodes();
+
+        assertThatThrownBy(() -> valid.set(0, TestNode.customer("x", 0, 9, 1)))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(valid::removeFirst).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> invalid.add(new TestInvalidNode("x", "z", "c")))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> invalid.removeIf(node -> true)).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(validation.getValidNodes()).hasSize(1);
+        assertThat(validation.getInvalidNodes()).hasSize(1);
+    }
+
+    @Test
+    void theCallersInputListIsNeitherModifiedNorShared() {
+        List<TestNode> input = new ArrayList<>(List.of(TestNode.customer("v", 0, 1, 1), TestNode.customer("i", 0, 2,
+                0)));
+
+        validation.validate(input);
+        input.clear();
+
+        assertThat(validation.getValidNodes()).extracting(TestNode::getCode).containsExactly("v");
+        assertThat(validation.getInvalidNodes()).hasSize(1);
+    }
+
+    @Test
+    void anInvalidNodeConversionReturningNullIsKept() {
+        // toInvalidNode is the subclass's business; a null conversion is published as a null element, not dropped.
+        List<List<ValidationResult>> seen = new ArrayList<>();
+        ValidationChecker<TestNode, TestInvalidNode> nullConverting = new ValidationChecker<>() {
+            @Override
+            protected void validate(TestNode node, Consumer<ValidationResult> consumer) {
+                if (node.getDemand() <= 0) {
+                    consumer.accept(new TestValidationResult("demand", node.getDemand()));
+                    consumer.accept(new TestValidationResult("again"));
+                }
+            }
+
+            @Override
+            protected TestInvalidNode toInvalidNode(TestNode node, List<ValidationResult> results) {
+                seen.add(results);
+                return null;
+            }
+
+            @Override
+            protected String getMessage(String key, Object... params) {
+                return key;
+            }
+        };
+
+        nullConverting.validate(List.of(TestNode.customer("a", 0, 1, 0), TestNode.customer("b", 0, 2, 1)));
+
+        assertThat(nullConverting.getInvalidNodes()).hasSize(1).containsOnlyNulls();
+        assertThat(nullConverting.getValidNodes()).extracting(TestNode::getCode).containsExactly("b");
+        assertThat(seen).hasSize(1);
+        assertThat(seen.getFirst()).extracting(ValidationResult::getCause).containsExactly("demand", "again");
     }
 
 }
