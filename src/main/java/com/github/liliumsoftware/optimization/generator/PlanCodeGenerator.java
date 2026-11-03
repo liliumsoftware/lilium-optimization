@@ -17,12 +17,17 @@
 package com.github.liliumsoftware.optimization.generator;
 
 /**
- * Strategy for minting unique plan codes during finalization.
+ * Strategy for minting plan codes, held by {@link com.github.liliumsoftware.optimization.BaseAlgorithmRunner} for the
+ * concrete runner to use (typically while finalizing plans); the algorithms never call it. Plan codes must be unique
+ * within a run (see {@link com.github.liliumsoftware.optimization.domain.Planable#getCode()}).
+ * {@link DateTimePlanCodeGenerator} is the bundled implementation.
  */
 public interface PlanCodeGenerator {
 
     /**
-     * A new, unique plan code.
+     * Mints a new plan code.
+     *
+     * @return a code distinct from every code this generator returned before
      */
     String generate();
 
