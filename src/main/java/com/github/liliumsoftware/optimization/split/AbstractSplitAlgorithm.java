@@ -29,18 +29,26 @@ import java.util.Map;
 
 /**
  * Splits nodes that are too large to be served by a single trackable: each oversized node is carved into a piece
- * that fits (kept in place, via {@link #createRemainingNode}) plus a remaining node (appended) that is split again
- * or planned separately, so downstream planning only ever sees plannable-sized nodes. The resource to split against
- * is the first one in {@link #comparator()} order. The default comparator orders by code only; override it to order
- * by size so the <em>smallest</em> resource is chosen, which yields the finest-grained pieces and the tightest
+ * that fits (kept in place, with the node's code) plus a remaining node (appended, with a code of its own) that is
+ * split again until it fits, so downstream planning only ever sees plannable-sized nodes. The resource to split
+ * against is the first one in {@link #comparator()} order. The default comparator orders by code only; override it to
+ * order by size so the <em>smallest</em> resource is chosen, which yields the finest-grained pieces and the tightest
  * packing.
  *
- * <p>Purely a pre-planning node transformation — it produces no plans and assigns no trackables;
- * contrast with {@link AbstractBigNodeSplitAlgorithm}, which splits against the biggest trackable and
- * emits single-node plans. Concrete subclasses supply the domain-specific "how big does the carved
- * piece / remainder end up" logic through the abstract hooks, and {@link #isShrinking} tells whether a carve made
- * progress: a resource that can carry nothing would otherwise leave a remainder as big as the node and repeat the
+ * <p>Purely a pre-planning node transformation: it produces no plans and assigns no trackables; contrast with
+ * {@link AbstractBigNodeSplitAlgorithm}, which splits against the biggest trackables and emits single-node plans.
+ * Concrete subclasses supply the domain-specific logic through the hooks: {@link #matchSmallestTrackable} decides
+ * whether a node is too big, {@link #createRemainingNode} sizes the carved piece and builds the remainder,
+ * {@link #supports} excludes nodes the resource may not serve at all, and {@link #isShrinking} tells whether a carve
+ * made progress: a resource that can carry nothing would otherwise leave a remainder as big as the node and repeat the
  * same split forever.
+ *
+ * <p>Holds no mutable state: one instance may split independent node lists concurrently, provided the fleet list is
+ * not modified.
+ *
+ * @param <P> the plan type of the domain (not used by the split itself)
+ * @param <N> the node type
+ * @param <T> the resource type
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -53,17 +61,26 @@ public abstract class AbstractSplitAlgorithm<P
      */
     private static final int MAX_PIECES = 100_000;
 
+    /**
+     * The fleet the nodes are split against, as given to the constructor (one element per resource; unit counts are
+     * not expanded).
+     */
     protected final List<T> trackables;
 
     /**
-     * Rewrites {@code nodes} in place: every node the smallest trackable can partially serve is replaced, at its
-     * position, by a carved piece plus an appended remainder. The remainder is added at the end, so a single pass
-     * naturally revisits it and keeps carving until nothing further fits. A carve whose remainder does not shrink
-     * ({@link #isShrinking}) is discarded and the node is left as it was. Returns the same (mutated) list; returns it
-     * untouched when no trackable is available.
+     * Rewrites {@code nodes} in place against the first trackable in {@link #comparator()} order: every node for which
+     * {@link #matchSmallestTrackable} (too big) and {@link #supports} both hold is carved. The carve copies the node
+     * ({@link Nodeable#copy()}), lets {@link #createRemainingNode} size that copy and build the remainder, puts the
+     * copy at the node's position and appends the remainder; a single pass therefore revisits every remainder and
+     * keeps carving until nothing is too big any more. A carve whose remainder does not shrink ({@link #isShrinking})
+     * is discarded (logged at WARN) and the node is left as it was. Nothing changes when the fleet is empty.
      *
-     * @throws IllegalStateException if one input node would be carved into more than 100 000 pieces — the sign of a
-     *                               resource that can carry nothing when {@link #isShrinking} is not overridden
+     * @param nodes the nodes to split; must be mutable ({@code set} and {@code add}), mutated
+     * @return {@code nodes}
+     * @throws IllegalStateException if one input node would be carved into more than 100 000 pieces (the sign of a
+     *                               resource that can carry nothing when {@link #isShrinking} is not overridden), or if
+     *                               {@link #createRemainingNode} gives a remainder the carved piece's code; the list
+     *                               may then be partly rewritten
      */
     public List<N> split(List<N> nodes) {
         List<T> sortedTrackables = trackables.stream().sorted(this.comparator()).toList();
@@ -104,17 +121,23 @@ public abstract class AbstractSplitAlgorithm<P
 
     /**
      * Whether carving {@code node} left a {@code remainingNode} strictly smaller than {@code node}. A split whose
-     * remainder does not shrink — typically against a resource that can carry nothing — is discarded and the node is
+     * remainder does not shrink (typically against a resource that can carry nothing) is discarded and the node is
      * kept unsplit instead of being carved again forever. The library cannot measure node sizes, so the default
      * accepts every carve (a runaway split then stops with an {@link IllegalStateException}); override it with the
      * domain's size comparison.
+     *
+     * @param node          the node that was carved
+     * @param remainingNode the remainder {@link #createRemainingNode} returned for it
+     * @return {@code true} to accept the carve; {@code true} by default
      */
     protected boolean isShrinking(N node, N remainingNode) {
         return true;
     }
 
     /**
-     * Orders the fleet; nodes are split against the first resource in this order. By code unless overridden.
+     * Orders the fleet; nodes are split against the first resource in this order, which should be the smallest.
+     *
+     * @return the fleet order; by {@link Trackable#getCode() code} unless overridden
      */
     protected Comparator<T> comparator() {
         return Comparator.comparing(T::getCode);
@@ -135,19 +158,35 @@ public abstract class AbstractSplitAlgorithm<P
     }
 
     /**
-     * Whether {@code trackable} may serve {@code node} at all; {@code true} by default.
+     * Whether {@code trackable} may serve {@code node} at all; a node it may not serve is left unsplit.
+     *
+     * @param trackable the resource the node would be split against
+     * @param node      the node
+     * @return {@code true} to allow the split; {@code true} by default
      */
     protected boolean supports(T trackable, N node) {
         return true;
     }
 
     /**
-     * The remainder of {@code node} once {@code newNode}, sized for {@code trackable}, has been carved off.
+     * Carves {@code newNode} off {@code node}: resizes {@code newNode}, a fresh copy of {@code node}, to what
+     * {@code trackable} can carry and returns the rest as a new node. {@code newNode} keeps the node's code and takes
+     * its place in the list, so the remainder must get a code of its own. {@code node} itself should not be changed:
+     * it stays in the list when {@link #isShrinking} rejects the carve.
+     *
+     * @param node      the node being split
+     * @param trackable the resource the piece is sized for
+     * @param newNode   a copy of {@code node} to resize into the carved piece; mutated
+     * @return the remainder; appended to the list and examined in turn
      */
     protected abstract N createRemainingNode(N node, T trackable, N newNode);
 
     /**
-     * Whether {@code node} is too big for {@code trackable}, the resource it is split against.
+     * Whether {@code node} is too big for {@code trackable}, the resource it is split against, and so must be carved.
+     *
+     * @param trackable the first resource in {@link #comparator()} order
+     * @param node      a node of the list, possibly a remainder of an earlier carve
+     * @return {@code true} if {@code node} exceeds what {@code trackable} can carry
      */
     protected abstract boolean matchSmallestTrackable(T trackable, N node);
 

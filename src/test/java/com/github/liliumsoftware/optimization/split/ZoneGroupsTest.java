@@ -233,4 +233,95 @@ class ZoneGroupsTest {
         }
     }
 
+    @Test
+    void aLaterWantingGroupOfTheOrderedPhaseSeesTheIdleUnitAnEarlierGroupTook() {
+        // Every plan has 2 customers. X, Y, W (5) are held by Z1, Z2, Z3; I1 (5) and I2 (1) are idle, and I2 carries
+        // none of the plans. Z1 and Z3 each ask for an extra plan: refused in phase 1, both want I1. Z2 asks for
+        // nothing and is content (I1 is its own category, I2 refuses its plan), so it is not run again. In phase 2 Z1
+        // runs first and takes I1 (smallest fitting first: p1 on I1, the extra on X); I2 is still idle, so Z3 runs
+        // again, but against the plans of Z1 it finds only I2 and is refused once more.
+        TestNode z1x = TestNode.customer("Z1x", "Z1", 30, 0, 1);
+        TestNode z1y = TestNode.customer("Z1y", "Z1", 40, 0, 1);
+        TestNode z3a = TestNode.customer("E", "Z3", -10, 0, 1);
+        TestNode z3b = TestNode.customer("F", "Z3", -20, 0, 1);
+        TestNode z3x = TestNode.customer("Z3x", "Z3", -30, 0, 1);
+        TestNode z3y = TestNode.customer("Z3y", "Z3", -40, 0, 1);
+        MatrixCostCalculation calculation = new MatrixCostCalculation(OptimizationType.LOCATION_ZONE,
+                Map.of("Z1", List.of("Z1"), "Z2", List.of("Z2"), "Z3", List.of("Z3")));
+        calculation.initializeCostMatrix(List.of(origin, z1a, z1b, z1x, z1y, z2c, z2d, z3a, z3b, z3x, z3y));
+        TestPlan p1 = plan("p1", "Z1", origin, z1a, z1b);
+        TestPlan p2 = plan("p2", "Z2", origin, z2c, z2d);
+        TestPlan p3 = plan("p3", "Z3", origin, z3a, z3b);
+        p1.setTrackable(new TestTrackable("X", 5));
+        p2.setTrackable(new TestTrackable("Y", 5));
+        p3.setTrackable(new TestTrackable("W", 5));
+        Map<String, TestPlan> extras = Map.of("Z1", plan("Z1-extra", "Z1", origin, z1x, z1y),
+                "Z3", plan("Z3-extra", "Z3", origin, z3x, z3y));
+        List<String> calls = Collections.synchronizedList(new ArrayList<>());
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("X", 5), new TestTrackable("Y", 5),
+                new TestTrackable("W", 5), new TestTrackable("I1", 5), new TestTrackable("I2", 1)));
+
+        List<TestPlan> result = ZoneGroups.apply(calculation, assignment, 3, new ArrayList<>(List.of(p1, p2, p3)),
+                (others, group) -> {
+                    String zone = group.getFirst().getZone();
+                    List<TestPlan> candidate = new ArrayList<>(group.stream().map(TestPlan::copy).toList());
+                    if (extras.containsKey(zone)) {
+                        candidate.add(extras.get(zone).copy());
+                    }
+                    boolean assigned = assignment.assign(others, candidate);
+                    calls.add(zone + "=" + assigned);
+                    return assigned ? candidate : group;
+                });
+
+        assertThat(calls.subList(0, 3)).containsExactlyInAnyOrder("Z1=false", "Z2=true", "Z3=false");
+        assertThat(calls.subList(3, calls.size())).containsExactly("Z1=true", "Z3=false");
+        assertThat(result).extracting(p -> p.getCode() + "=" + p.getTrackable())
+                .containsExactly("p1=I1#0", "Z1-extra=X#0", "p2=Y#0", "p3=W#0");
+        PlanInvariants.assertTrackablesAreDistinct(result);
+    }
+
+    @Test
+    void aSingleGroupRunsOnceAgainstAPlainEmptyListThatLeavesTheIdleUnitsInReach() {
+        // With one group there is nobody to compete with: the optimizer runs once, its otherPlans is an ordinary empty
+        // list, so the extra plan may take the idle unit Y directly.
+        TestAssignment assignment = new TestAssignment(List.of(new TestTrackable("X", 5), new TestTrackable("Y", 5)));
+        TestPlan p1 = plan("p1", "Z1", origin, z1a);
+        p1.setTrackable(new TestTrackable("X", 5));
+        AtomicInteger calls = new AtomicInteger();
+        List<TestPlan> returned = new ArrayList<>();
+
+        List<TestPlan> result = ZoneGroups.apply(calculation(), assignment, 4, new ArrayList<>(List.of(p1)),
+                (others, group) -> {
+                    calls.incrementAndGet();
+                    assertThat(others).isEmpty();
+                    others.add(p1);
+                    List<TestPlan> candidate = new ArrayList<>(List.of(p1.copy(), plan("extra", "Z1", origin, z1b)));
+                    assertThat(assignment.assign(new ArrayList<>(), candidate)).isTrue();
+                    assertThat(assignment.wantedIdleUnits(others)).isFalse();
+                    returned.addAll(candidate);
+                    return returned;
+                });
+
+        assertThat(calls).hasValue(1);
+        assertThat(result).extracting(p -> p.getCode() + "=" + p.getTrackable())
+                .containsExactly("p1=X#0", "extra=Y#0");
+        assertThat(result).as("a new list, not the optimizer's").isNotSameAs(returned);
+    }
+
+    @Test
+    void noPlansMeansNoRunAndAMutableEmptyResult() {
+        AtomicInteger calls = new AtomicInteger();
+
+        List<TestPlan> result = ZoneGroups.apply(calculation(), new TestAssignment(List.of(new TestTrackable("X", 5))),
+                2, new ArrayList<>(), (others, group) -> {
+                    calls.incrementAndGet();
+                    return group;
+                });
+
+        assertThat(calls).hasValue(0);
+        assertThat(result).isEmpty();
+        result.add(plan("p", "Z1", origin, z1a));
+        assertThat(result).hasSize(1);
+    }
+
 }

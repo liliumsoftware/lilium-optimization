@@ -44,7 +44,15 @@ import java.util.stream.IntStream;
  *
  * <p>Both phases have a fixed outcome for a given input, so the result never depends on thread timing or hash order;
  * no unit is ever booked twice. Groups come back in the order of their first plan in the input. A single group runs
- * directly, with an empty {@code otherPlans}.
+ * directly, once, with an empty plain {@code otherPlans} (so the whole pool, idle units included, is in reach), and an
+ * empty input returns at once without calling the optimizer.
+ *
+ * <p><strong>Optimizer contract.</strong> The phase-1 {@code otherPlans} lists read the units of the other groups from
+ * those groups' original plan objects while all groups run, so the optimizer must assign resources on copies of its
+ * group's plans, or otherwise never leave an original plan object without its unit (not even transiently, as the
+ * greedy step of {@link TrackableAssignment#assign(List, List)} may when it reassigns the given plan objects in
+ * place). Otherwise a concurrent group could see that unit as free and book it too. The optimizer runs concurrently on
+ * different groups, so it must be safe to call from several threads at once.
  */
 public final class ZoneGroups {
 
@@ -53,11 +61,24 @@ public final class ZoneGroups {
 
     /**
      * Partitions {@code plans} into at most {@code maxSplitCount} zone groups (see {@link ZoneSplitAlgorithm#groups})
-     * and runs {@code optimizer} over them in the two phases described above.
+     * and runs {@code optimizer} over them in the two phases described above. An empty {@code plans} yields an empty
+     * list and a single group is optimized once, directly.
      *
-     * @param optimizer {@code (otherPlans, group) -> optimized group}; may mutate and return {@code group}, must assign
-     *                  resources against {@code otherPlans} through {@link TrackableAssignment}
-     * @return a new list holding every group's result, groups in input order
+     * @param <P>                 the plan type
+     * @param <N>                 the node type
+     * @param costCalculation     the zone predicates the groups are formed by
+     * @param trackableAssignment the shared fleet: builds the phase-1 {@code otherPlans} lists
+     *                            ({@link TrackableAssignment#withoutIdleUnits}) and decides, per group, whether phase 2
+     *                            runs ({@link TrackableAssignment#sharesUnits},
+     *                            {@link TrackableAssignment#wantedIdleUnits}, {@link TrackableAssignment#hasIdleUnits})
+     * @param maxSplitCount       upper bound on the number of groups; at least {@code 1}
+     * @param plans               the plans to optimize; not modified, but the plan objects are handed to the optimizer
+     * @param optimizer           {@code (otherPlans, group) -> optimized group}: receives a new mutable list per group,
+     *                            may mutate and return it, and must assign resources against {@code otherPlans} through
+     *                            {@link TrackableAssignment} (see the optimizer contract above)
+     * @return a new mutable list holding every group's result, groups in the order of their first plan in
+     *         {@code plans}
+     * @throws IllegalArgumentException if {@code maxSplitCount < 1}
      */
     public static <P extends Planable<P, N, ?>, N extends Nodeable<N>> List<P> apply(
             PathCostCalculation<P, N, ?> costCalculation, TrackableAssignment<P, ?> trackableAssignment,
