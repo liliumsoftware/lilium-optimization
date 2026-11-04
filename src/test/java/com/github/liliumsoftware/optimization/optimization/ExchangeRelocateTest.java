@@ -125,7 +125,9 @@ class ExchangeRelocateTest {
 
         List<TestPlan> result = exchange.apply(plans);
 
-        assertThat(PlanInvariants.referenceTotalCost(result)).as("%s never worsens", type).isLessThanOrEqualTo(before);
+        // Both routes cross the 1000-unit gap; swapping N1 against F2 removes one crossing whatever the strategy, so
+        // every strategy must strictly improve (an algorithm that did nothing would pass a "<=" check).
+        assertThat(PlanInvariants.referenceTotalCost(result)).as("%s strictly improves", type).isLessThan(before);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, near2, far1, far2));
         PlanInvariants.assertNodeLayout(result);
         PlanInvariants.assertTrackablesAreDistinct(result);
@@ -262,7 +264,9 @@ class ExchangeRelocateTest {
 
         List<TestPlan> result = relocate.apply(plans);
 
-        assertThat(PlanInvariants.referenceTotalCost(result)).as("%s never worsens", type).isLessThanOrEqualTo(before);
+        // Relocating F1 next to F2 ([O, N1] + [O, N2, F1, F2] = 10 + 1010) removes a gap crossing for every
+        // strategy, so each must strictly improve.
+        assertThat(PlanInvariants.referenceTotalCost(result)).as("%s strictly improves", type).isLessThan(before);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, near2, far1, far2));
         PlanInvariants.assertNodeLayout(result);
         PlanInvariants.assertTrackablesAreDistinct(result);
