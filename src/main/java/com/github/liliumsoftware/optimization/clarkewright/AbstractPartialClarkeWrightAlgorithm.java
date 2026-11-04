@@ -26,20 +26,37 @@ import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Clarke-Wright construction restricted to a subset of the resource fleet. {@link #apply} repeatedly frees a
- * trackable from a plan, hands that plan to a spare one, and re-plans the freed customers against the
- * remaining ("partial") trackable pool — a way to consolidate work onto fewer resources. All merge/assign
- * steps therefore go through the {@code withTrackables} variants of {@link TrackableAssignment} so they only
- * ever draw from the currently available pool rather than the full fleet.
+ * Clarke-Wright construction of the customers an existing plan set does not yet cover, on the part of the fleet that
+ * set leaves free.
+ *
+ * <p>{@link #apply} first plans the not-yet-covered customers with the inherited {@link #plan} on the units of the
+ * assignment's current pool that no plan holds (the "partial" pool) and keeps the result when it plans anything. Only
+ * when it plans nothing (or no unit is free) does it try resource hand-overs: it moves a resource-holding plan from its
+ * unit to a unit no plan holds, which frees the first unit, and then plans the not-yet-covered customers on the units
+ * no plan holds (including the freed one). The first hand-over whose re-planning yields at least one plan is kept —
+ * costs are not compared — and the search restarts; it ends when no hand-over yields a new plan. The purpose is to
+ * serve more customers with the units the existing plans leave idle, not to reduce cost or the number of resources
+ * used.
+ *
+ * <p>All merge and assignment steps of the inherited construction go through the {@code withTrackables} variants of
+ * {@link TrackableAssignment}, so they only ever draw from the partial pool rather than the full fleet. Outside
+ * {@link #apply} (a direct call of {@link #plan}) the pool is the assignment's current pool
+ * ({@link TrackableAssignment#getCurrentTrackables()}), as for the full construction.
+ *
+ * <p><strong>Thread-safety.</strong> The partial pool lives in a thread-local for the duration of one {@link #apply}
+ * call and is handed explicitly to the parallel sweep workers, so concurrent {@code apply} calls on one instance with
+ * independent inputs cannot see each other's pool.
+ *
+ * @param <P> the plan/route type
+ * @param <N> the node/stop type
+ * @param <T> the resource type
  */
 @Slf4j
 public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P, N, T>, N extends Nodeable<N>,
@@ -55,7 +72,14 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     private final ThreadLocal<List<T>> trackables = new ThreadLocal<>();
 
     /**
-     * Zone-restricted variant with the classic saving; see the parent constructors for the parameters.
+     * Zone-restricted construction ({@link OptimizationType#LOCATION_ZONE}) with the classic saving ({@code λ = 1}, no
+     * β).
+     *
+     * @param costCalculation      the cost model; its matrix must be initialized before planning
+     * @param trackableAssignment  the resource assignment; its expanded fleet ({@code getTrackables()}) is the
+     *                             set of units hand-overs choose from
+     * @param localSearchAlgorithm the local search applied to merged plans
+     * @throws NullPointerException if any argument is {@code null}
      */
     public AbstractPartialClarkeWrightAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, T> trackableAssignment,
@@ -65,7 +89,14 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     }
 
     /**
-     * Classic saving under the given zone policy.
+     * Construction with the classic saving ({@code λ = 1}, no β) under the given zone policy.
+     *
+     * @param costCalculation      the cost model; its matrix must be initialized before planning
+     * @param trackableAssignment  the resource assignment; its expanded fleet ({@code getTrackables()}) is the
+     *                             set of units hand-overs choose from
+     * @param localSearchAlgorithm the local search applied to merged plans
+     * @param optimizationType     the zone policy
+     * @throws NullPointerException if any argument is {@code null}
      */
     public AbstractPartialClarkeWrightAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, T> trackableAssignment,
@@ -76,7 +107,16 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     }
 
     /**
-     * λ sweep without a β term.
+     * Construction sweeping the given λ values without a β term.
+     *
+     * @param costCalculation      the cost model; its matrix must be initialized before planning
+     * @param trackableAssignment  the resource assignment; its expanded fleet ({@code getTrackables()}) is the
+     *                             set of units hand-overs choose from
+     * @param localSearchAlgorithm the local search applied to merged plans
+     * @param optimizationType     the zone policy
+     * @param lambdas              the λ values to sweep; copied
+     * @throws NullPointerException     if any argument or λ is {@code null}
+     * @throws IllegalArgumentException if {@code lambdas} is empty or any λ is not a finite number
      */
     public AbstractPartialClarkeWrightAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, T> trackableAssignment,
@@ -88,7 +128,17 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
 
     /**
      * Full λ × β sweep; see {@link AbstractClarkeWrightAlgorithm#AbstractClarkeWrightAlgorithm(PathCostCalculation,
-     * TrackableAssignment, LocalSearchAlgorithm, OptimizationType, List, List)} for the validation rules.
+     * TrackableAssignment, LocalSearchAlgorithm, OptimizationType, List, List)} for the parameter semantics.
+     *
+     * @param costCalculation      the cost model; its matrix must be initialized before planning
+     * @param trackableAssignment  the resource assignment; its expanded fleet ({@code getTrackables()}) is the
+     *                             set of units hand-overs choose from
+     * @param localSearchAlgorithm the local search applied to merged plans
+     * @param optimizationType     the zone policy
+     * @param lambdas              the λ values to sweep, in tie-breaking order; copied
+     * @param betas                the β values to sweep, possibly empty; copied
+     * @throws NullPointerException     if any argument, λ or β is {@code null}
+     * @throws IllegalArgumentException if {@code lambdas} is empty, or any λ or β is not a finite number
      */
     public AbstractPartialClarkeWrightAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, T> trackableAssignment,
@@ -100,14 +150,41 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     }
 
     /**
-     * Consolidates work onto fewer resources: repeatedly hands a plan's trackable over to a spare one and re-plans
-     * the customers not yet covered against the remaining pool. Mutates and returns {@code plans}. Safe to call
-     * concurrently on one instance with independent inputs. {@code cancel()} aborts with a
-     * {@link com.github.liliumsoftware.optimization.exception.CancelException}; {@code interrupt()} stops further
-     * hand-overs and returns the plans as they are (the re-planning itself, being construction, always completes).
-     * Plans without a resource are carried along unchanged.
+     * Plans the customers {@code plans} does not cover on the units it leaves free, first directly and then, if that
+     * plans nothing, through resource hand-overs.
      *
+     * <p><strong>Free units first.</strong> When some customers of {@code customers} are not served by {@code plans}
+     * (matched by code), they are first planned with {@link #plan} on the units of the assignment's current pool
+     * ({@link TrackableAssignment#getCurrentTrackables()}) that no plan of {@code plans} holds. If that yields at least
+     * one plan, the new plans are appended to {@code plans} (the existing plans are not touched) and {@code plans} is
+     * returned; customers the new plans cannot serve stay unplanned. Otherwise (or when no unit is free, or nothing is
+     * uncovered) the hand-over search below runs.
+     *
+     * <p><strong>Hand-overs.</strong> For each ordered pair of distinct units {@code (i, j)} of the expanded fleet
+     * ({@code TrackableAssignment.getTrackables()}), in fleet order: if a plan holds unit {@code i}, no plan holds unit
+     * {@code j} and {@link TrackableAssignment#assignWithTrackable} gives unit {@code j} to that plan, then the
+     * customers of {@code customers} whose code no plan serves are planned with {@link #plan} on the units no plan
+     * holds afterwards (unit {@code i} among them). All of this happens on deep copies of {@code plans}. If the
+     * re-planning returns at least one plan, the contents of {@code plans} are replaced by the copies followed by the
+     * new plans and the scan restarts from the first pair; the result is accepted whatever its cost. Otherwise the
+     * attempt is discarded. Each accepted hand-over adds at least one resource-holding plan, so the scan ends once no
+     * pair yields a new plan. When no plan holds a resource (or the fleet has fewer than two units) the hand-over
+     * search leaves {@code plans} unchanged. Plans without a resource are carried along (as copies after an accepted
+     * hand-over); their customers count as covered. Customers the new plans cannot serve stay unplanned.
+     *
+     * <p>{@code cancel()} aborts with a {@link com.github.liliumsoftware.optimization.exception.CancelException};
+     * {@code interrupt()} stops further hand-overs (and skips the free-unit step when it arrives before it) and returns
+     * the plans as they are (a re-planning in progress, being construction, completes).
+     *
+     * @param origin    the depot the new plans start from
+     * @param customers every customer that should be served, covered or not; not modified
+     * @param plans     the existing plans; the new plans are appended to it, and its contents are replaced on every
+     *                  accepted hand-over
+     * @return {@code plans} itself
      * @throws IllegalArgumentException if two customers share a code
+     * @throws com.github.liliumsoftware.optimization.exception.CancelException if the algorithm is cancelled or the
+     *     running thread is interrupted
+     * @throws ArithmeticException      if the total cost of a candidate plan set does not fit a {@code long}
      */
     public List<P> apply(N origin, List<N> customers, List<P> plans) {
         requireDistinctCodes(customers);
@@ -119,6 +196,25 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     }
 
     private List<P> doApply(N origin, List<N> customers, List<P> plans) {
+        List<N> unplanned = getUnplannedNodes(plans, customers);
+        // An interrupt skips this step like a hand-over: the plans are returned as they are.
+        if (!unplanned.isEmpty() && !isInterrupted()) {
+            // Free units first: the units no plan holds may serve the uncovered customers without any hand-over.
+            List<T> free = trackableAssignment.getCurrentTrackables().stream()
+                    .filter(t -> plans.stream().noneMatch(p -> t.equals(p.getTrackable())))
+                    .collect(Collectors.toList());
+            if (!free.isEmpty()) {
+                this.trackables.set(free);
+                List<P> newPlans = plan(origin, unplanned);
+                if (!newPlans.isEmpty()) {
+                    plans.addAll(newPlans);
+                    if (log.isTraceEnabled()) {
+                        log.trace(getMessage(plans));
+                    }
+                    return plans;
+                }
+            }
+        }
         List<T> trackables = trackableAssignment.getTrackables();
         for (int i = 0; i < trackables.size(); i++) {
             int index = i;
@@ -145,7 +241,9 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
                         plans.clear();
                         plans.addAll(tempPlans);
                         plans.addAll(newPlans);
-                        log.trace(getMessage(plans));
+                        if (log.isTraceEnabled()) {
+                            log.trace(getMessage(plans));
+                        }
                         i = -1;
                         break;
                     }
@@ -156,119 +254,102 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     }
 
     /**
-     * Same grid as the parent, but every worker merges against the pool captured on the calling thread.
+     * Same grid as the parent, but every worker merges against the pool captured on the calling thread
+     * ({@link #partialTrackables()}), since the workers cannot see the caller's thread-local.
+     *
+     * @param origin    the depot
+     * @param customers the customers the savings are formed over
+     * @param plans     the plans to merge; not modified
+     * @return one outcome per grid point, in configuration order
+     * @throws com.github.liliumsoftware.optimization.exception.CancelException if the algorithm is cancelled
      */
     @Override
     protected List<PlanList<P>> getPlans(N origin, List<N> customers, List<P> plans) {
         List<T> pool = partialTrackables();
+        List<P> fixed = fixedPlans();
         Function<N, N> routeStarts = getRouteStarts(origin, plans);
         Function<N, N> routeEnds = getRouteEnds(origin, plans);
         if (betas.isEmpty()) {
-            return lambdas.parallelStream().map(l -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
-                            .collect(Collectors.toList()),
-                    getSavings(origin, customers, routeStarts, routeEnds, l, 0), pool), new LambdaBeta(l))).toList();
+            return lambdas.parallelStream().map(l -> new PlanList<>(withFixedPlans(fixed, () -> mergePlans(
+                    plans.stream().map(Planable::copy).collect(Collectors.toList()),
+                    getSavings(origin, customers, routeStarts, routeEnds, l, 0), pool)), new LambdaBeta(l))).toList();
         }
-        Map<LambdaBeta, List<Saving>> savings = new HashMap<>();
-        lambdas.forEach(l -> betas.forEach(b -> savings.put(new LambdaBeta(l, b), getSavings(origin, customers,
-                routeStarts, routeEnds, l, b))));
-        return savings.entrySet().parallelStream().map(s -> new PlanList<>(mergePlans(plans.stream().map(Planable::copy)
-                        .collect(Collectors.toList()),
-                s.getValue(), pool), s.getKey())).collect(Collectors.toList());
+        return grid().parallelStream().map(lb -> new PlanList<>(withFixedPlans(fixed, () -> mergePlans(
+                plans.stream().map(Planable::copy).collect(Collectors.toList()),
+                getSavings(origin, customers, routeStarts, routeEnds, lb.lambda(), lb.beta()), pool)), lb)).toList();
     }
 
+    /**
+     * The parent's merge walk on the partial pool of the current thread ({@link #partialTrackables()}).
+     *
+     * @param plans   the plans to merge; its contents are replaced on every accepted merge
+     * @param savings the savings in the order to try them; cleared once walked
+     * @return a new list of the plans holding a resource
+     * @throws com.github.liliumsoftware.optimization.exception.CancelException if the algorithm is cancelled
+     */
     @Override
     protected List<P> mergePlans(List<P> plans, List<Saving> savings) {
         return mergePlans(plans, savings, partialTrackables());
     }
 
     /**
-     * The parent's greedy merge, assigning only from {@code pool}.
+     * The parent's greedy merge walk (see {@link AbstractClarkeWrightAlgorithm#mergePlans(List, List)}), assigning
+     * only from {@code pool}: through {@link TrackableAssignment#assignWithTrackables(List, List)} for each merge
+     * attempt and {@link TrackableAssignment#assignWithTrackables(List, Planable, List)} for the leftover plans. The
+     * units held by the fixed previous plans of the running {@link #plan} call (see
+     * {@link AbstractClarkeWrightAlgorithm#plan}) are taken out of {@code pool} first, so they are never handed out.
+     *
+     * @param plans   the plans to merge; its contents are replaced on every accepted merge
+     * @param savings the savings in the order to try them; cleared once walked
+     * @param pool    the units resources may be drawn from; not modified
+     * @return a new list of the plans holding a resource
+     * @throws com.github.liliumsoftware.optimization.exception.CancelException if the algorithm is cancelled
      */
     protected List<P> mergePlans(List<P> plans, List<Saving> savings, List<T> pool) {
-        List<N> customers;
-        // Walk the list once instead of removing its head each time: on an ArrayList every head removal shifts all
-        // remaining savings, which made this loop quadratic in the number of savings.
-        for (Saving saving : savings) {
-            P firstPlan = null;
-            P secondPlan = null;
-            for (P plan : plans) {
-                checkCancel();
-                if (firstPlan != null && secondPlan != null) {
-                    break;
-                }
-                customers = plan.getCustomers();
-                if (customers.isEmpty()) {
-                    continue;
-                }
-                if (customers.getFirst().getCode().equals(saving.destination().getCode())) {
-                    secondPlan = plan;
-                    continue;
-                }
-                if (customers.getLast().getCode().equals(saving.origin().getCode())) {
-                    firstPlan = plan;
-                }
-            }
-            if (firstPlan == null || secondPlan == null) {
-                log.trace("There is no route with start / end matching saving : {}. saving ignored", saving);
-            } else {
-                log.trace("Trying to merge based on saving: {}", saving);
-                List<N> newNodes = new ArrayList<>();
-                // Depot stops as in AbstractClarkeWrightAlgorithm#mergePlans: first route's origin, second route's end.
-                N mergedOrigin = firstPlan.getOrigin() != null ? firstPlan.getOrigin() : secondPlan.getOrigin();
-                if (mergedOrigin != null) {
-                    newNodes.add(mergedOrigin);
-                }
-                newNodes.addAll(firstPlan.getCustomers());
-                newNodes.addAll(secondPlan.getCustomers());
-                N mergedDestination = secondPlan.getDestination() != null ? secondPlan.getDestination()
-                        : firstPlan.getDestination();
-                if (mergedDestination != null) {
-                    newNodes.add(mergedDestination);
-                }
-                P newPlan = getNewPlan(firstPlan, newNodes);
-                List<P> tempPlans = new PlanMerger<>(plans, firstPlan, secondPlan, newPlan).merge();
-                List<P> mergedPlans = tempPlans.stream()
-                        .filter(p -> p.getTrackable() != null || p.equals(newPlan)).collect(Collectors.toList());
-                boolean result = trackableAssignment.assignWithTrackables(mergedPlans, pool);
-                if (result) {
-                    plans.clear();
-                    mergedPlans.replaceAll(localSearchAlgorithm::apply);
-                    plans.addAll(tempPlans.stream().filter(p -> p.getTrackable() == null && !p.equals(newPlan))
-                            .toList());
-                    plans.addAll(mergedPlans);
-                    log.trace("Merged plan: {}", newPlan);
-                } else {
-                    log.trace("Merging plans failed");
-                }
-            }
-        }
-        savings.clear();
-        List<P> finalPlans = plans.stream().filter(p -> p.getTrackable() != null).collect(Collectors.toList());
-        for (P plan : plans.stream().filter(p -> p.getTrackable() == null).sorted(planComparator()).toList()) {
-            checkCancel();
-            if (trackableAssignment.assignWithTrackables(finalPlans, plan, pool)) {
-                finalPlans.add(plan);
-            } else {
-                log.trace("Trackable assignment failed");
-            }
-        }
-        finalPlans.replaceAll(localSearchAlgorithm::apply);
-        log.trace("Merged plans");
-        return finalPlans;
+        List<T> free = withoutUnitsOf(pool, fixedPlans());
+        return mergePlans(plans, savings, merged -> trackableAssignment.assignWithTrackables(merged, free),
+                (kept, plan) -> trackableAssignment.assignWithTrackables(kept, plan, free));
     }
 
     /**
-     * The restricted pool {@link #apply} narrowed the fleet to, or the whole fleet when the inherited
-     * {@code plan(...)} is invoked on its own (i.e. before any hand-over has happened) — without that fallback
-     * a standalone {@code plan(...)} would dereference the not-yet-assigned pool.
+     * Probes on the partial pool of the current thread, without the units of {@code fixed}, as the merge walk assigns.
+     */
+    @Override
+    boolean canTakePart(List<P> plans, List<P> fixed) {
+        return trackableAssignment.assignWithTrackables(plans, withoutUnitsOf(partialTrackables(), fixed));
+    }
+
+    /**
+     * {@code pool} without the units {@code plans} hold; {@code pool} itself when no plan holds one of them.
+     */
+    private List<T> withoutUnitsOf(List<T> pool, List<P> plans) {
+        if (plans.isEmpty()) {
+            return pool;
+        }
+        List<T> free = new ArrayList<>(pool);
+        free.removeAll(plans.stream().map(P::getTrackable).toList());
+        return free;
+    }
+
+    /**
+     * The restricted pool the current thread's {@link #apply} call narrowed the fleet to, or the assignment's current
+     * pool ({@link TrackableAssignment#getCurrentTrackables()}) when the inherited {@link #plan} is invoked on its own
+     * (outside {@code apply}) — the same units the full construction would draw from, so a pool a second-dispatch
+     * assignment has narrowed is respected.
+     *
+     * @return the units no plan of the current {@code apply} step holds, or
+     *     {@code TrackableAssignment.getCurrentTrackables()}
      */
     protected List<T> partialTrackables() {
         List<T> pool = trackables.get();
-        return pool == null ? trackableAssignment.getTrackables() : pool;
+        return pool == null ? trackableAssignment.getCurrentTrackables() : pool;
     }
 
     /**
-     * The trace message logged after a hand-over.
+     * The trace message logged after an accepted hand-over; only called when trace logging is enabled.
+     *
+     * @param plans the plans after the hand-over
+     * @return the message
      */
     protected String getMessage(List<P> plans) {
         return "PartialClarkeWright " + plans.size() + " plans";
@@ -277,6 +358,10 @@ public abstract class AbstractPartialClarkeWrightAlgorithm<P extends Planable<P,
     /**
      * The customers not yet served by {@code plans}, matched by code so a consumer whose node {@code copy()} is not
      * {@code equals} to its source never has a served customer planned twice.
+     *
+     * @param plans     the current plans; their customers count as served
+     * @param customers every customer that should be served; not modified
+     * @return a new list of the unserved customers, in {@code customers} order
      */
     protected List<N> getUnplannedNodes(List<P> plans, List<N> customers) {
         Set<String> plannedCodes = plans.stream().flatMap(p -> p.getCustomers().stream()).map(Nodeable::getCode)

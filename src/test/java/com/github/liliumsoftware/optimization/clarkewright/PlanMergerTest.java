@@ -152,4 +152,52 @@ class PlanMergerTest {
                 .containsExactly(merged);
     }
 
+    @Test
+    void mergingAPlanWithItselfIsRejected() {
+        // The merge core skips such a saving; the merger itself would otherwise have to remove one plan twice.
+        TestPlan only = plan("p1", "A");
+        TestPlan other = plan("p2", "B");
+        TestPlan merged = plan("merged", "A");
+
+        assertThatThrownBy(() -> new PlanMerger<>(List.of(only, other), only, only, merged).merge())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot be null");
+    }
+
+    @Test
+    void aSecondPlanMissingFromTheListIsRejected() {
+        TestPlan inList = plan("p1", "A");
+        TestPlan stranger = plan("stranger", "Z");
+        TestPlan merged = plan("merged", "A");
+
+        assertThatThrownBy(() -> new PlanMerger<>(List.of(inList), stranger, inList, merged).merge())
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new PlanMerger<>(List.of(inList, plan("p2", "B")), inList, stranger, merged).merge())
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void theSourcePlansAreLocatedByIdentityNotByEquals() {
+        // The decoy is equal to the first plan by code and sits in front of it. Locating the plans with equals/indexOf
+        // would put the result in the decoy's slot and could remove the decoy's copy instead of the first plan's.
+        TestPlan decoy = plan("p1", "D");
+        decoy.setEquality(TestPlan.Equality.CODE);
+        decoy.setTrackable(new TestTrackable("T0", 5));
+        TestPlan first = plan("p1", "A");
+        first.setEquality(TestPlan.Equality.CODE);
+        first.setTrackable(new TestTrackable("T1", 5));
+        TestPlan second = plan("p2", "B");
+        second.setEquality(TestPlan.Equality.CODE);
+        TestPlan merged = new TestPlan("p1", List.of(origin,
+                TestNode.customer("A", 0, 10, 1), TestNode.customer("B", 0, 10, 1)));
+        merged.setEquality(TestPlan.Equality.CODE);
+
+        List<TestPlan> result = new PlanMerger<>(List.of(decoy, first, second), first, second, merged).merge();
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getCustomers()).extracting(TestNode::getCode).containsExactly("D");
+        assertThat(result.get(0).getTrackable()).isEqualTo(new TestTrackable("T0", 5));
+        assertThat(result.get(1)).isSameAs(merged);
+    }
+
 }

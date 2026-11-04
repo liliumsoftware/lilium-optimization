@@ -17,14 +17,20 @@
 package com.github.liliumsoftware.optimization.clarkewright;
 
 /**
- * One point in the Clarke-Wright parameter sweep. {@code lambda} is the classic savings shape parameter
- * (route-shape weight); {@code beta} biases the symmetric variant toward the better of the two merge
- * directions ({@code beta <= 0} disables it). The sweep evaluates a grid of these and keeps the best plan set.
+ * One point in the Clarke-Wright parameter sweep. The sweep evaluates a grid of these and keeps the best plan set
+ * (see {@link AbstractClarkeWrightAlgorithm}). Neither component is validated here; the algorithm's constructors
+ * reject non-finite values, and β is never range-checked.
+ *
+ * @param lambda the weight of the direct edge in the saving formula; any finite value, it only reorders the merges
+ * @param beta   the weight of the better orientation in the blended saving; {@code beta <= 0} selects the plain
+ *               saving, {@code beta > 1} extrapolates beyond the better orientation
  */
 public record LambdaBeta(double lambda, double beta) {
 
     /**
      * A λ-only point ({@code beta = 0}, i.e. the plain saving).
+     *
+     * @param lambda the weight of the direct edge in the saving formula
      */
     public LambdaBeta(double lambda) {
         this(lambda, 0);

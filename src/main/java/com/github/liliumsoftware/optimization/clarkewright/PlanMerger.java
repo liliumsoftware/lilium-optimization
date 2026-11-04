@@ -23,17 +23,36 @@ import java.util.List;
 
 /**
  * Produces a fresh plan list in which {@code firstPlan} and {@code secondPlan} are replaced by their
- * already-computed {@code mergeResult}, working on deep copies so the input list is left untouched. The
- * merged plan is inserted at the position of whichever input already had a trackable assigned (preserving
- * ordering that assignment depends on), or appended when neither did. The replaced copies are removed by
- * identity, so the result is kept even when it {@code equals} one of the source plans (for example by code).
+ * already-computed {@code mergeResult}. Every plan of {@code plans} is copied with {@link Planable#copy()}, so neither
+ * the input list nor its plans are modified; {@code mergeResult} itself is inserted as is, not copied. The merged plan
+ * takes the position of {@code firstPlan} when that one holds a resource, otherwise of {@code secondPlan} when it does
+ * (preserving the order resource assignment depends on), and is appended when neither does. The source plans are
+ * located, and their copies removed, by identity, so plan {@code equals} plays no part: the result is kept even when it
+ * {@code equals} one of the source plans (for example by code).
+ *
+ * @param plans       the current plan list; contains {@code firstPlan} and {@code secondPlan}
+ * @param firstPlan   the plan whose route comes first in the merged route; an element of {@code plans}
+ * @param secondPlan  the plan whose route comes second; another element of {@code plans}
+ * @param mergeResult the merged plan replacing both
+ * @param <P>         the plan type
  */
 public record PlanMerger<P extends Planable<P, ?, ?>>(List<P> plans, P firstPlan, P secondPlan, P mergeResult) {
+
+    private static <P> int indexOfInstance(List<P> plans, P plan) {
+        for (int i = 0; i < plans.size(); i++) {
+            if (plans.get(i) == plan) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
     /**
      * Performs the merge.
      *
-     * @return a new list of copies with the two source plans replaced by {@code mergeResult}
+     * @return a new, modifiable list of copies with the two source plans replaced by {@code mergeResult}
+     * @throws IllegalStateException if {@code firstPlan} or {@code secondPlan} is not an element of {@code plans}
+     *                               (by identity), or both are the same object
      */
     public List<P> merge() {
         List<P> tempPlans = new ArrayList<>();
@@ -42,9 +61,9 @@ public record PlanMerger<P extends Planable<P, ?, ?>>(List<P> plans, P firstPlan
         for (P plan : plans) {
             P tempPlan = plan.copy();
             tempPlans.add(tempPlan);
-            if (plan.equals(firstPlan)) {
+            if (plan == firstPlan) {
                 tempFirst = tempPlan;
-            } else if (plan.equals(secondPlan)) {
+            } else if (plan == secondPlan) {
                 tempSecond = tempPlan;
             }
         }
@@ -63,13 +82,8 @@ public record PlanMerger<P extends Planable<P, ?, ?>>(List<P> plans, P firstPlan
     private int findMergeIndex(List<P> plans, P firstPlan, P secondPlan) {
         if (firstPlan.getTrackable() == null && secondPlan.getTrackable() == null) {
             return plans.size();
-        } else {
-            if (firstPlan.getTrackable() != null) {
-                return plans.indexOf(firstPlan);
-            } else {
-                return plans.indexOf(secondPlan);
-            }
         }
+        return indexOfInstance(plans, firstPlan.getTrackable() != null ? firstPlan : secondPlan);
     }
 
 }
