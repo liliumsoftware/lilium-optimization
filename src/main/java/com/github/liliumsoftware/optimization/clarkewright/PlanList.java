@@ -22,6 +22,10 @@ import java.util.List;
 
 /**
  * A candidate plan set together with the {@link LambdaBeta} parameters that produced it during the sweep.
+ *
+ * @param plans      the plans one merge pass produced; the list is held as given, not copied
+ * @param lambdaBeta the parameters of that pass
+ * @param <P>        the plan type
  */
 public record PlanList<P extends Planable<P, ?, ?>>(List<P> plans, LambdaBeta lambdaBeta) {
 

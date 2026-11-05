@@ -23,6 +23,8 @@ import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 import com.github.liliumsoftware.optimization.optimization.AbstractRelocateAlgorithm;
 import com.github.liliumsoftware.optimization.optimization.ExchangeRelocateType;
 
+import java.util.List;
+
 /**
  * Concrete inter-plan relocate (one-way segment transfer).
  */
@@ -34,6 +36,10 @@ public final class TestRelocate extends AbstractRelocateAlgorithm<TestPlan, Test
             AbstractInsertionAlgorithm<TestPlan, TestNode, ?> insertionAlgorithm,
             ExchangeRelocateType type, int neighbors, int chain) {
         super(costCalculation, trackableAssignment, localSearchAlgorithm, insertionAlgorithm, type, neighbors, chain);
+    }
+
+    public boolean applyPair(List<TestPlan> plans, TestPlan firstPlan, TestPlan secondPlan) {
+        return apply(List.of(), plans, firstPlan, secondPlan);
     }
 
 }

@@ -23,6 +23,8 @@ import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 import com.github.liliumsoftware.optimization.optimization.AbstractExchangeAlgorithm;
 import com.github.liliumsoftware.optimization.optimization.ExchangeRelocateType;
 
+import java.util.List;
+
 /**
  * Concrete inter-plan exchange (segment swap); the base class supplies all behaviour, so this only fixes the
  * type parameters and exposes the pairwise entry point for focused tests.
@@ -36,6 +38,13 @@ public final class TestExchange extends AbstractExchangeAlgorithm<TestPlan, Test
             ExchangeRelocateType type, int neighbors, int chain, boolean cross) {
         super(costCalculation, trackableAssignment, localSearchAlgorithm, insertionAlgorithm, type, neighbors, chain,
                 cross);
+    }
+
+    /**
+     * Runs the move search for one plan pair only — the unit the accept/reject logic actually operates on.
+     */
+    public boolean applyPair(List<TestPlan> plans, TestPlan firstPlan, TestPlan secondPlan) {
+        return apply(List.of(), plans, firstPlan, secondPlan);
     }
 
 }

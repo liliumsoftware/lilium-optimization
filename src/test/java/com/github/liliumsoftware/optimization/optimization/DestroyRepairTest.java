@@ -94,7 +94,9 @@ class DestroyRepairTest {
 
         List<TestPlan> result = destroyRepair(calculation, 2, 0).apply(plans);
 
-        assertThat(PlanInvariants.referenceTotalCost(result)).isLessThanOrEqualTo(before);
+        // 2010 before. Any route reaching F2 costs at least 1010, so the single open route O-N1-N2-F1-F2 (1010) is the
+        // optimum, and nothing constrains the search from reaching it.
+        assertThat(PlanInvariants.referenceTotalCost(result)).isLessThan(before).isEqualTo(1010);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, near2, far1, far2));
         PlanInvariants.assertNodeLayout(result);
         PlanInvariants.assertTrackablesAreDistinct(result);
@@ -115,7 +117,8 @@ class DestroyRepairTest {
 
         List<TestPlan> result = destroyRepair(calculation, 1, 0).apply(plans);
 
-        assertThat(PlanInvariants.referenceTotalCost(result)).isLessThan(before);
+        // 2010 before; the optimum is the single route O-N1-N2-F1-F2 (1010), see neverWorsensAndKeepsEveryCustomer.
+        assertThat(PlanInvariants.referenceTotalCost(result)).isLessThan(before).isEqualTo(1010);
         PlanInvariants.assertAllCustomersVisitedExactlyOnce(result, List.of(near1, near2, far1, far2));
     }
 

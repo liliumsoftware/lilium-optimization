@@ -20,19 +20,36 @@ import com.github.liliumsoftware.optimization.assignment.TrackableAssignment;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.insertion.AbstractInsertionAlgorithm;
 import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Predicate;
 
 /**
- * Inter-plan <em>exchange</em>: swaps a segment of one plan with a segment of another (both plans give up a
- * chain and receive one), accepting only feasible, cost-reducing swaps. Candidate targets are limited to the
- * source node's {@code neighbors} nearest neighbours in the same/neighbouring zone, so the O(plans² × nodes²)
- * search stays tractable. Only customer segments are eligible; depot endpoints never move.
+ * Inter-plan <em>exchange</em>: swaps a segment of one plan with a segment of another, so both plans give up a chain of
+ * customers and receive one, accepting only assignable, cost-reducing swaps. The search, acceptance, local search and
+ * signal handling are those of {@link AbstractExchangeRelocateAlgorithm}.
+ *
+ * <p>Every plan pair is tried in both orientations: either plan's segment may be the first one. A swap of
+ * {@code [i, i + x)} of the first plan with {@code [j, j + y)} of the second plan is tried only when both segments
+ * consist of customers (depots never move), the plans' zones are neighbours, and the first stop of the second segment
+ * is among the {@code neighbors} nearest nodes of the first stop of the first segment (see the class description of
+ * {@link AbstractExchangeRelocateAlgorithm}). {@code x} ranges up to {@code chain}; {@code y} up to {@code chain} with
+ * {@code cross}, otherwise {@code y = 1}, so without {@code cross} a multi-stop segment of either plan may be swapped
+ * against a single customer of the other. The segments are re-added as the
+ * {@link ExchangeRelocateType} prescribes:
+ * <ul>
+ *   <li>{@code SIMPLE}: each segment takes the other's place, in its original order;</li>
+ *   <li>{@code TWO_OPT}: as {@code SIMPLE}, then both plans go through the local search before the swap is judged;</li>
+ *   <li>{@code INSERTION}: the first segment's customers are inserted into the second plan, then the second segment's
+ *       into the first plan, each by the insertion algorithm restricted to that plan; the swap is rejected unless
+ *       every customer is placed.</li>
+ * </ul>
+ *
+ * @param <P> the plan type
+ * @param <N> the node type
  */
 public abstract class AbstractExchangeAlgorithm<P
         extends Planable<P, N, ?>, N extends Nodeable<N>> extends AbstractExchangeRelocateAlgorithm<P, N> {
@@ -40,12 +57,19 @@ public abstract class AbstractExchangeAlgorithm<P
     /**
      * Creates an exchange move.
      *
-     * @param type      how removed segments are re-added
-     * @param neighbors how many nearest neighbours of a segment start qualify as targets
-     * @param chain     maximum segment length moved from either plan
-     * @param cross     {@code true} to let the second plan's segment be up to {@code chain} stops long as well;
-     *                  {@code false} to swap the first plan's segment against a single stop of the second plan (it is
-     *                  still a two-way swap, not a one-way move — that is {@link AbstractRelocateAlgorithm})
+     * @param pathCostCalculation  supplies the nearest-node ranking and zone neighbourhood; must be initialized with
+     *                             every node of the plans
+     * @param trackableAssignment  re-assigns the resources of every candidate plan set
+     * @param localSearchAlgorithm improves the touched plans and, after every accepted swap, every plan; must not
+     *                             modify its argument
+     * @param insertionAlgorithm   re-inserts the swapped segments under {@link ExchangeRelocateType#INSERTION}
+     * @param type                 how the swapped segments are re-added
+     * @param neighbors            how many nearest nodes of a segment's first stop qualify as swap partners
+     * @param chain                the maximum number of stops in a swapped segment
+     * @param cross                {@code true} to let the second plan's segment be up to {@code chain} stops long as
+     *                             well; {@code false} to swap the first plan's segment against a single customer of the
+     *                             second plan (still a two-way swap, not a one-way move: that is
+     *                             {@link AbstractRelocateAlgorithm})
      */
     public AbstractExchangeAlgorithm(PathCostCalculation<P, N, ?> pathCostCalculation,
             TrackableAssignment<P, ?> trackableAssignment, LocalSearchAlgorithm<P> localSearchAlgorithm,
@@ -53,6 +77,29 @@ public abstract class AbstractExchangeAlgorithm<P
             boolean cross) {
         super(pathCostCalculation, trackableAssignment, localSearchAlgorithm, insertionAlgorithm, type, neighbors,
                 chain, cross);
+    }
+
+    /**
+     * Tries the swap in both orientations: first with {@code firstPlan}'s segment starting at {@code i} as the first
+     * segment and {@code secondPlan}'s segment starting at {@code j} as the second, then, if that was not accepted,
+     * the other way round. The orientation decides which plan's segment starts the neighbour test and, without
+     * {@code cross}, which plan gives up the segment of up to {@code chain} stops (the other gives up a single
+     * customer), so both plans of a pair get both roles.
+     *
+     * @param otherPlans the plans of the other zone groups, honoured by the resource assignment
+     * @param plans      the plans being improved; its elements are replaced when a move is accepted
+     * @param firstPlan  an element of {@code plans}
+     * @param secondPlan another element of {@code plans}
+     * @param i          a position in {@code firstPlan}
+     * @param j          a position in {@code secondPlan}
+     * @return {@code true} if a move was accepted and {@code plans} changed
+     * @throws CancelException     if the search was cancelled
+     * @throws ArithmeticException if a summed cost does not fit a {@code long}
+     */
+    @Override
+    protected boolean apply(List<P> otherPlans, List<P> plans, P firstPlan, P secondPlan, int i, int j) {
+        return super.apply(otherPlans, plans, firstPlan, secondPlan, i, j)
+                || super.apply(otherPlans, plans, secondPlan, firstPlan, j, i);
     }
 
     @Override
@@ -100,19 +147,13 @@ public abstract class AbstractExchangeAlgorithm<P
                 .anyMatch(n -> n.getType() != Nodeable.Type.CUSTOMER)) {
             return false;
         }
-        if (!super.supports(firstPlan, secondPlan, firstPlanStart, secondPlanStart, firstPlanEnd, secondPlanEnd)) {
-            return false;
-        }
-        N firstNode = firstPlan.getNodes().get(firstPlanStart);
-        N secondNode = secondPlan.getNodes().get(secondPlanStart);
-        Predicate<N> excludePredicate = e -> firstPlan.getNodes().stream().noneMatch(n -> Objects.equals(e.getCode(),
-                n.getCode()));
-        Predicate<N> neighborsPredicate = n -> costCalculation.isNeighbor(n.getZone(), firstNode.getZone());
-        return costCalculation.getClosestNodes(firstNode.getCode()).stream()
-                .filter(excludePredicate) // exclude nodes on the same plan
-                .filter(neighborsPredicate) // exclude non-neighbors
-                .limit(neighbors) // use only first neighbors
-                .anyMatch(n -> Objects.equals(n.getCode(), secondNode.getCode())); // check if target matches
+        return super.supports(firstPlan, secondPlan, firstPlanStart, secondPlanStart, firstPlanEnd, secondPlanEnd);
+    }
+
+    @Override
+    protected boolean supportsNeighbor(P firstPlan, P secondPlan, int firstPlanStart, int secondPlanStart) {
+        return isAmongNeighbors(firstPlan, firstPlan.getNodes().get(firstPlanStart),
+                secondPlan.getNodes().get(secondPlanStart));
     }
 
     @Override
