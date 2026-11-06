@@ -20,6 +20,7 @@ import com.github.liliumsoftware.optimization.assignment.TrackableAssignment;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.insertion.AbstractInsertionAlgorithm;
 import com.github.liliumsoftware.optimization.insertion.InsertionCandidate;
 import lombok.extern.slf4j.Slf4j;
@@ -30,27 +31,53 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Balances plans by <em>customer count</em>: while the gap between the largest and smallest plan is at least
- * {@code threshold}, it moves a neighbouring customer into the smallest plan (via cheapest insertion) and out
- * of its current one. Only a plan with at least two customers more than the receiving plan may donate, so every
- * transfer strictly evens the load out (customers never bounce between small plans). Among the feasible transfers it
- * keeps the one whose resulting plan set is <em>cheapest</em> ({@code min} under {@link #plansComparator()}). Iterates
- * until the spread is below the threshold or no admissible transfer is left, and returns the best state seen (smallest
- * spread, then cheapest). Balancing still trades cost for evenness; this choice only makes each step the least
- * expensive way to do so. Plans are located by position and customers by code, never by {@code equals};
- * {@code cancel()} and {@code interrupt()} are honoured between transfers and forwarded to the insertion algorithm.
+ * Balances plans by <em>customer count</em>: while the largest and the smallest plan differ by at least
+ * {@code threshold} customers, one neighbouring customer is moved into a small plan from a larger one.
+ *
+ * <p>Each step looks at the plans from the fewest customers up, as long as the largest plan exceeds them by at least
+ * {@code threshold}, and for the first that can receive a customer tries every customer whose zone neighbours the
+ * receiving plan's, taken from the plans with at least two customers more than the receiving plan (so every transfer
+ * strictly evens the load out and customers never bounce between small plans). The customer is placed at the
+ * receiving plan's best position found by the insertion algorithm
+ * ({@link AbstractInsertionAlgorithm#getBestInsertionCandidate}), removed from its donor, and the transfer is
+ * admissible when the resources can be re-assigned with {@link TrackableAssignment#assignGreedy(List, List)}. Among
+ * the admissible transfers the step keeps the one whose plan set is <em>cheapest</em> ({@code min} under
+ * {@link #plansComparator()}). Steps repeat until the spread is below the threshold or no admissible transfer is left,
+ * which always happens because every transfer strictly evens the counts out, and the best state seen is returned
+ * (smallest spread, then cheapest). Balancing still trades cost for evenness; this choice only makes each step the
+ * least expensive way to do so.
+ *
+ * <p>Plans are located by position and customers by code, never by {@code equals}. Every candidate is built on
+ * copies, so neither the list passed in nor its plans are modified. {@link #cancel()} aborts with a
+ * {@link CancelException}; {@link #interrupt()} is polled before every step and returns the best state seen so far.
+ * Both signals are forwarded to the insertion algorithm.
+ *
+ * @param <P> the plan type
+ * @param <N> the node type
+ * @param <C> the insertion candidate type of the insertion algorithm
  */
 @Slf4j
 public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<N>,
         C extends InsertionCandidate<P, N>> extends AbstractBalanceAlgorithm<P, N> {
 
+    /**
+     * Finds the best position for a customer in the receiving plan.
+     */
     protected final AbstractInsertionAlgorithm<P, N, C> insertionAlgorithm;
+    /**
+     * The customer-count spread at or above which balancing runs.
+     */
     protected final int threshold;
 
     /**
      * Creates a customer-count balancer.
      *
-     * @param threshold balancing runs while the largest and smallest plan differ by at least this many customers
+     * @param costCalculation     supplies the zone neighbourhood and zone grouping
+     * @param trackableAssignment assigns the resources of every candidate plan set
+     * @param insertionAlgorithm  finds the best position for a customer in the receiving plan
+     * @param threshold           balancing runs while the largest and the smallest plan differ by at least this many
+     *                            customers; a transfer always needs a donor with at least two customers more than the
+     *                            receiver, whatever the threshold
      */
     public AbstractNodeBalanceAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, ?> trackableAssignment, AbstractInsertionAlgorithm<P, N, C> insertionAlgorithm,
@@ -66,8 +93,16 @@ public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, 
     }
 
     /**
-     * See the class description; the input list and its plans are left untouched (the input list itself is returned
-     * when no transfer is made).
+     * Runs balancing steps on {@code plans} until the spread is below the threshold, no admissible transfer is left or
+     * the algorithm is interrupted (see the class description).
+     *
+     * @param otherPlans the plans of the other zone groups, whose resources the assignment must leave alone; not
+     *                   modified
+     * @param plans      the group to balance; neither the list nor its plans are modified
+     * @return the best state seen (smallest spread, then cheapest), a new list; {@code plans} itself when no transfer
+     *         was made or none led to a better state
+     * @throws CancelException     if the balancing was cancelled
+     * @throws ArithmeticException if a summed cost does not fit a {@code long}
      */
     @Override
     public List<P> doOperation(List<P> otherPlans, List<P> plans) {
@@ -124,7 +159,9 @@ public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, 
                 }
             }
             if (!candidates.isEmpty()) {
-                log.debug(getMessage(minPlan));
+                if (log.isDebugEnabled()) {
+                    log.debug(getMessage(minPlan));
+                }
                 return candidates.stream().min(plansComparator()).orElseThrow(IllegalStateException::new);
             }
         }
@@ -139,7 +176,8 @@ public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, 
     }
 
     /**
-     * Propagates cancellation to the nested insertion algorithm before cancelling itself.
+     * Requests an abort of this algorithm and of its insertion algorithm; see
+     * {@link com.github.liliumsoftware.optimization.BaseAlgorithm#cancel()}.
      */
     @Override
     public void cancel() {
@@ -148,7 +186,8 @@ public abstract class AbstractNodeBalanceAlgorithm<P extends Planable<P, N, ?>, 
     }
 
     /**
-     * Propagates the graceful stop to the nested insertion algorithm before interrupting itself.
+     * Requests a graceful stop of this algorithm and of its insertion algorithm; see
+     * {@link com.github.liliumsoftware.optimization.BaseAlgorithm#interrupt()}.
      */
     @Override
     public void interrupt() {

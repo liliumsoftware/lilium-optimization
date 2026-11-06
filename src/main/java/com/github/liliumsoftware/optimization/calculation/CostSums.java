@@ -28,8 +28,11 @@ final class CostSums {
     /**
      * {@code sum + cost}, checked.
      *
+     * @param sum     the running sum
+     * @param cost    the cost to add
      * @param what    the kind of sum, for the error message (for example {@code "plan"})
      * @param subject the code of what is being summed, for the error message
+     * @return {@code sum + cost}
      * @throws ArithmeticException if the sum does not fit a {@code long}
      */
     static long add(long sum, long cost, String what, String subject) {

@@ -22,6 +22,7 @@ import com.github.liliumsoftware.optimization.calculation.CostCalculation;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.split.ZoneGroups;
 import lombok.RequiredArgsConstructor;
 
@@ -33,17 +34,33 @@ import java.util.Map;
 import java.util.function.ToLongFunction;
 
 /**
- * Base for load-balancing plans against each other. {@link #apply} first partitions plans into independent
- * zone groups (so balancing never moves work across non-neighbouring zones) and balances the groups through
- * {@link ZoneGroups} (in parallel on the units each group holds, then in input order with the idle units) via the
- * subclass's {@link #doOperation}, so no resource is booked twice and the result is deterministic. Subclasses decide
- * what "balance" means (customer count, capacity, …).
+ * Base for load balancing between plans: moving customers from loaded plans into light ones, trading cost for
+ * evenness. Subclasses decide what "balanced" means ({@link AbstractNodeBalanceAlgorithm} for customer counts,
+ * {@link AbstractCapacityBalanceAlgorithm} for a domain capacity measure) and implement {@link #doOperation}.
+ *
+ * <p>{@link #apply(List)} partitions the plans into independent zone groups (so balancing never moves work across
+ * non-neighbouring zones) and balances the groups through {@link ZoneGroups}: first in parallel, each group limited to
+ * the resources its own plans hold, then, for the groups that wanted an idle resource, once more one after the other in
+ * input order against the current plans of the other groups. No resource is booked twice and the result does not
+ * depend on thread timing. Balancing never modifies the list passed in or its plan objects; it returns a new list.
+ *
+ * <p><strong>Thread-safety.</strong> No mutable state beyond the signal flags; one instance may run on independent
+ * lists concurrently, and the collaborators must be thread-safe because zone groups run in parallel.
+ *
+ * @param <P> the plan type
+ * @param <N> the node type
  */
 @RequiredArgsConstructor
 public abstract class AbstractBalanceAlgorithm<P
         extends Planable<P, N, ?>, N extends Nodeable<N>> extends BaseAlgorithm {
 
+    /**
+     * Supplies the zone neighbourhood that decides which customers may move into a plan, and the zone grouping.
+     */
     protected final PathCostCalculation<P, N, ?> costCalculation;
+    /**
+     * Assigns the resources of every candidate plan set; a transfer whose plans cannot all be assigned is rejected.
+     */
     protected final TrackableAssignment<P, ?> trackableAssignment;
 
     /**
@@ -85,8 +102,12 @@ public abstract class AbstractBalanceAlgorithm<P
     }
 
     /**
-     * Balances {@code plans} zone group by zone group through {@link ZoneGroups} and returns the concatenated result (a
-     * new list) in the order of each group's first input plan.
+     * Balances {@code plans} zone group by zone group through {@link ZoneGroups} (see the class description).
+     *
+     * @param plans the plans to balance; neither the list nor its plan objects are modified
+     * @return a new list holding every group's result, groups in the order of their first plan in {@code plans}
+     * @throws CancelException     if the balancing was cancelled
+     * @throws ArithmeticException if a summed cost or capacity does not fit a {@code long}
      */
     public List<P> apply(List<P> plans) {
         return ZoneGroups.apply(costCalculation, trackableAssignment, Math.max(1, plans.size()), plans,
@@ -94,17 +115,27 @@ public abstract class AbstractBalanceAlgorithm<P
     }
 
     /**
-     * Balances one zone group against the plans of the other groups ({@code otherPlans}, whose resources it may not
-     * take) and returns the resulting plans; the input list is not mutated. Implementations assign candidate plan sets
-     * with {@link TrackableAssignment#assignGreedy(List, List)
-     * trackableAssignment.assignGreedy(otherPlans, candidate)}, which keeps those resources out of reach.
+     * Balances one zone group against the plans of the other groups. Implementations must not modify {@code plans} or
+     * its plan objects, and must assign every candidate plan set with
+     * {@link TrackableAssignment#assignGreedy(List, List) trackableAssignment.assignGreedy(otherPlans, candidate)},
+     * which keeps the resources of {@code otherPlans} out of reach.
+     *
+     * @param otherPlans the plans of the other zone groups; not modified
+     * @param plans      the group to balance; not modified
+     * @return the balanced plans, or {@code plans} itself when nothing was moved
+     * @throws CancelException if the balancing was cancelled
      */
     public abstract List<P> doOperation(List<P> otherPlans, List<P> plans);
 
     /**
-     * The customers of {@code donors} that may move into {@code minPlan} (zone-neighbouring ones), each mapped to
-     * the donor it comes from, in plan and route order. The balancing subclasses pass only the admissible donors;
-     * an override must map every customer to one of the given donor instances.
+     * The customers of {@code donors} that may move into {@code minPlan}, each mapped to the donor it comes from, in
+     * donor and route order. The default implementation admits a customer when its zone is a neighbour of
+     * {@code minPlan}'s ({@link PathCostCalculation#isNeighbor}). The balancing subclasses pass only the admissible
+     * donors; an override must map every customer to one of the given donor instances.
+     *
+     * @param donors  copies of the plans that may give up a customer; not modified
+     * @param minPlan a copy of the plan that receives a customer
+     * @return the candidate customers and their donors, in a map with a deterministic iteration order
      */
     protected Map<N, P> getOtherPlanNodes(List<P> donors, P minPlan) {
         Map<N, P> planNodes = new LinkedHashMap<>();   // insertion order keeps candidate evaluation deterministic
@@ -115,14 +146,22 @@ public abstract class AbstractBalanceAlgorithm<P
     }
 
     /**
-     * Orders candidate plan sets by ascending total cost; {@link #doOperation} keeps the minimum.
+     * Orders candidate plan sets; each balancing step keeps the minimum, and ties in evenness between states seen are
+     * broken by it. The default implementation orders by ascending {@link CostCalculation#totalCost summed cost}, which
+     * throws {@link ArithmeticException} when a sum does not fit a {@code long}.
+     *
+     * @return the comparator of candidate plan sets
      */
     protected Comparator<List<P>> plansComparator() {
         return Comparator.comparingLong(CostCalculation::totalCost);
     }
 
     /**
-     * The debug message logged for an accepted transfer into {@code plan}.
+     * The message logged at DEBUG level for a balancing step that moves a customer into {@code plan}; only called when
+     * DEBUG is enabled.
+     *
+     * @param plan the receiving plan, before the transfer
+     * @return the log message
      */
     protected abstract String getMessage(P plan);
 }

@@ -20,6 +20,7 @@ import com.github.liliumsoftware.optimization.assignment.TrackableAssignment;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.insertion.AbstractInsertionAlgorithm;
 import com.github.liliumsoftware.optimization.insertion.InsertionCandidate;
 import lombok.extern.slf4j.Slf4j;
@@ -30,29 +31,56 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Balances plans by <em>capacity</em> (a domain-defined {@link #getCapacity(Planable)} measure): while any
- * plan sits below {@code minCapacity}, it pulls one neighbouring customer into that plan via cheapest insertion.
- * A transfer is admissible only when the total shortfall below the floor, measured after the resources have been
- * re-assigned, strictly shrinks; so customers never bounce between plans below the floor, a donor may itself drop
- * below the floor when that still reduces the total shortfall, and the loop terminates even when
- * {@link #getCapacity(Planable)} depends on the assigned resource. Among the admissible single-customer transfers it
- * keeps the one whose resulting plan set is <em>cheapest</em> ({@code min} under {@link #plansComparator()}), then
- * repeats until every plan meets the floor or no admissible transfer is assignable, and returns the best state seen
- * (smallest shortfall, then cheapest). Balancing still trades cost for evenness; this choice only makes each step the
- * least expensive way to do so. Plans are located by position and customers by code, never by {@code equals};
- * {@code cancel()} and {@code interrupt()} are honoured between transfers and forwarded to the insertion algorithm.
+ * Balances plans by <em>capacity</em>, a domain measure supplied by {@link #getCapacity(Planable)} (for example the
+ * load a plan carries): while a plan sits below {@code minCapacity}, one neighbouring customer is moved into it from
+ * another plan.
+ *
+ * <p>Each step looks at the plans below the floor from the lowest capacity up and, for the first that can receive a
+ * customer, tries every customer of every other plan with at least two customers whose zone neighbours the receiving
+ * plan's: the customer is placed at the receiving plan's best position found by the insertion algorithm
+ * ({@link AbstractInsertionAlgorithm#getBestInsertionCandidate}), removed from its donor, and the resources are
+ * re-assigned with {@link TrackableAssignment#assignGreedy(List, List)}. A transfer is admissible only when that
+ * assignment succeeds and the total shortfall below the floor, measured after the re-assignment, strictly shrinks; so
+ * customers never bounce between plans below the floor, a donor may itself drop below the floor when that still
+ * reduces the total shortfall, and the loop terminates even when {@link #getCapacity(Planable)} depends on the
+ * assigned resource. Among the admissible transfers the step keeps the one whose plan set is <em>cheapest</em>
+ * ({@code min} under {@link #plansComparator()}). A donor always keeps at least one customer, as in
+ * {@link AbstractNodeBalanceAlgorithm}, so balancing never empties or removes a plan: dissolving a plan concentrates
+ * load rather than evening it out, and is left to the merge algorithms. Steps repeat until every plan meets the floor
+ * or no admissible transfer exists, and the best state seen is returned (smallest shortfall, then cheapest).
+ * Balancing still trades cost for evenness; this choice only makes each step the least expensive way to do so.
+ *
+ * <p>Plans are located by position and customers by code, never by {@code equals}. Every candidate is built on
+ * copies, so neither the list passed in nor its plans are modified. {@link #cancel()} aborts with a
+ * {@link CancelException}; {@link #interrupt()} is polled before every step and returns the best state seen so far.
+ * Both signals are forwarded to the insertion algorithm.
+ *
+ * @param <P> the plan type
+ * @param <N> the node type
+ * @param <C> the insertion candidate type of the insertion algorithm
  */
 @Slf4j
 public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, ?>, N extends Nodeable<N>,
         C extends InsertionCandidate<P, N>> extends AbstractBalanceAlgorithm<P, N> {
 
+    /**
+     * Finds the best position for a customer in the receiving plan.
+     */
     protected final AbstractInsertionAlgorithm<P, N, C> insertionAlgorithm;
+    /**
+     * The floor every plan should reach, in {@link #getCapacity(Planable)} units.
+     */
     protected final long minCapacity;
 
     /**
      * Creates a capacity balancer.
      *
-     * @param minCapacity the floor every plan should reach, in {@link #getCapacity(Planable)} units
+     * @param costCalculation     supplies the zone neighbourhood and zone grouping
+     * @param trackableAssignment assigns the resources of every candidate plan set
+     * @param insertionAlgorithm  finds the best position for a customer in the receiving plan
+     * @param minCapacity         the floor every plan should reach, in {@link #getCapacity(Planable)} units; a plan
+     *                            whose capacity is below it receives customers, and its shortfall is
+     *                            {@code minCapacity - getCapacity(plan)}
      */
     public AbstractCapacityBalanceAlgorithm(PathCostCalculation<P, N, ?> costCalculation,
             TrackableAssignment<P, ?> trackableAssignment, AbstractInsertionAlgorithm<P, N, C> insertionAlgorithm,
@@ -63,8 +91,17 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
     }
 
     /**
-     * See the class description; the input list and its plans are left untouched (the input list itself is returned
-     * when no transfer is made).
+     * Runs balancing steps on {@code plans} until every plan meets the floor, no admissible transfer is left or the
+     * algorithm is interrupted (see the class description).
+     *
+     * @param otherPlans the plans of the other zone groups, whose resources the assignment must leave alone; not
+     *                   modified
+     * @param plans      the group to balance; neither the list nor its plans are modified
+     * @return the best state seen (smallest shortfall, then cheapest), a new list; {@code plans} itself when no
+     *         transfer was made
+     * @throws CancelException     if the balancing was cancelled
+     * @throws ArithmeticException if a capacity difference, the total shortfall or a summed cost does not fit a
+     *                             {@code long}
      */
     @Override
     public List<P> doOperation(List<P> otherPlans, List<P> plans) {
@@ -99,7 +136,8 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
             List<P> donors = new ArrayList<>();
             List<Integer> donorIndexes = new ArrayList<>();
             for (int i = 0; i < plans.size(); i++) {
-                if (i != minIndex) {
+                // A donor keeps at least one customer, as in node balancing: balancing never dissolves a plan.
+                if (i != minIndex && plans.get(i).getCustomerCount() >= 2) {
                     donors.add(plans.get(i).copy());
                     donorIndexes.add(i);
                 }
@@ -123,7 +161,9 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
                 }
             }
             if (!candidates.isEmpty()) {
-                log.debug(getMessage(minPlan));
+                if (log.isDebugEnabled()) {
+                    log.debug(getMessage(minPlan));
+                }
                 return candidates.stream().min(plansComparator()).orElseThrow(IllegalStateException::new);
             }
         }
@@ -139,13 +179,21 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
 
     /**
      * Total capacity missing below the floor, summed over the plans.
+     *
+     * @throws ArithmeticException if a difference or the sum does not fit a {@code long}, instead of wrapping to a
+     *                             value that would make a worse candidate look better
      */
     private long shortfall(List<P> plans) {
-        return plans.stream().mapToLong(p -> Math.max(0, minCapacity - getCapacity(p))).sum();
+        long total = 0;
+        for (P plan : plans) {
+            total = Math.addExact(total, Math.max(0, Math.subtractExact(minCapacity, getCapacity(plan))));
+        }
+        return total;
     }
 
     /**
-     * Propagates cancellation to the nested insertion algorithm before cancelling itself.
+     * Requests an abort of this algorithm and of its insertion algorithm; see
+     * {@link com.github.liliumsoftware.optimization.BaseAlgorithm#cancel()}.
      */
     @Override
     public void cancel() {
@@ -154,7 +202,8 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
     }
 
     /**
-     * Propagates the graceful stop to the nested insertion algorithm before interrupting itself.
+     * Requests a graceful stop of this algorithm and of its insertion algorithm; see
+     * {@link com.github.liliumsoftware.optimization.BaseAlgorithm#interrupt()}.
      */
     @Override
     public void interrupt() {
@@ -168,7 +217,12 @@ public abstract class AbstractCapacityBalanceAlgorithm<P extends Planable<P, N, 
     }
 
     /**
-     * The capacity measure of {@code plan} that is compared with the floor.
+     * The capacity measure of {@code plan} that is compared with {@code minCapacity}, for example its summed demand.
+     * It may depend on the plan's assigned resource: it is read after the resources of a candidate set have been
+     * re-assigned. Called many times per step, so it should be cheap.
+     *
+     * @param plan a plan of the group being balanced, or a candidate copy of one
+     * @return the plan's capacity, in the units of {@code minCapacity}
      */
     protected abstract long getCapacity(P plan);
 
