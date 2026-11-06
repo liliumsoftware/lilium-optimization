@@ -26,14 +26,31 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 /**
- * Shelf (guillotine) heuristic for placing 3D boxes into one container. Bins are packed largest-area-first
- * into rows along the length; each row's height opens the next shelf level, and levels stack until the
- * container height is exhausted. A bin may be rotated 90° in the horizontal plane when that is the only way
- * it fits the current row (it does not fit the free space unrotated, or its unrotated width exceeds the row's cut
- * width). This is a fast feasibility heuristic, not an optimal packer: {@link #isValid}
- * reports whether every given bin was placed, and {@link #getCount} probes how many identical bins fit. Bins are
- * tracked by position in the input, so bins that are {@code equals} to each other (for example records of the same
- * size) are each placed in their own right.
+ * Shelf (guillotine) heuristic for placing 3D boxes into one container. This is a fast feasibility heuristic, not an
+ * optimal packer: {@link #pack} returns the placements, {@link #isValid} reports whether every given bin was placed,
+ * and {@link #getCount} probes how many identical bins fit.
+ *
+ * <p><strong>Layout.</strong> Bins are taken largest footprint ({@link Bin#getArea()}) first; bins of equal area keep
+ * their input order. Each level spans the whole container floor and is filled row by row: a row runs along the
+ * container length (x) from {@code x = 0}, its depth along the width (y) is fixed by the first bin placed in it, and
+ * later bins join the row only if they are no deeper. A bin may be rotated 90° in the horizontal plane when that is
+ * the only way it fits the current row (it does not fit the free space unrotated, or its unrotated width exceeds the
+ * row's depth). When a row takes no bin the level is full and the next level starts on the whole floor again; its
+ * vertical offset is the sum of the heights of the tallest bin of each level below. A bin is only placed if its own
+ * height fits under the container height above that offset. Packing stops when a level takes no bin at all.
+ *
+ * <p><strong>Stacking.</strong> {@link Bin#getStackCount()} is the highest level (1-based) a bin may be placed on.
+ * It is not checked against the bins underneath: a bin with stack count 2 may sit above one with stack count 1, and
+ * an upper-level bin may sit partly or wholly over empty floor (there is no support check). {@link Position} carries
+ * the level but no z coordinate; derive it from the heights of the lower levels if needed.
+ *
+ * <p>Bins are tracked by position in the input, so bins that are {@code equals} to each other (for example records of
+ * the same size) are each placed in their own right. A bin with a non-positive length, width or height is never
+ * placed (it is skipped, and the other bins are packed as if it were absent); the container's dimensions are not
+ * validated, and a container with a non-positive dimension simply fits nothing.
+ *
+ * <p>Holds no mutable state besides the container reference: one instance may be used from several threads as long
+ * as the container and the bins are not mutated concurrently.
  *
  * @param <C> the container type
  * @param <B> the bin type
@@ -41,42 +58,77 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 public class BinPacking<C extends Container<C>, B extends Bin<B>> {
 
+    /**
+     * The container every call packs into; held by reference, not copied, and not validated.
+     */
     private final C container;
 
     /**
-     * How many copies of {@code bin} fit into the container, found by packing 1, 2, 3, … copies until one no longer
-     * fits. O(k) packings for an answer of k.
+     * How many copies of {@code bin} fit into the container under this heuristic.
+     *
+     * <p>Copies of one bin are identical, so the heuristic fills the same sequence of slots one copy after the other:
+     * packing {@code k} copies places exactly {@code min(k, capacity)} of them (the placed copies are always a prefix
+     * of that sequence). The count is therefore found by packing 1, 2, 4, … copies until a packing leaves one out and
+     * reading the capacity off that packing: O(log k) packings for an answer of {@code k}, instead of the k + 1
+     * packings of trying every count. The copies are made with {@link Bin#copy()} and numbered {@code 0 .. n-1} with
+     * {@link Bin#setIndex(int)}. The doubling stops at 2<sup>30</sup> copies, so larger capacities are reported as
+     * 2<sup>30</sup>.
+     *
+     * @param bin the bin to replicate; not modified
+     * @return how many copies fit; {@code 0} when not even one does (or a dimension of the bin is not positive)
+     * @throws NullPointerException if {@code bin} is {@code null} or its {@code copy()} returns {@code null}
      */
     public int getCount(B bin) {
-        int i = 1;
-        while (isValid(IntStream.range(0, i).mapToObj(value -> {
+        int copies = 1;
+        while (true) {
+            int placed = pack(copies(bin, copies)).size();
+            if (placed < copies || copies > Integer.MAX_VALUE / 2) {
+                return placed;
+            }
+            copies *= 2;
+        }
+    }
+
+    private List<B> copies(B bin, int count) {
+        return IntStream.range(0, count).mapToObj(value -> {
             B copy = bin.copy();
             copy.setIndex(value);
             return copy;
-        }).toList())) {
-            i++;
-        }
-        return i - 1;
+        }).toList();
     }
 
     /**
-     * Whether every given bin can be placed.
+     * Whether every given bin can be placed, i.e. {@link #pack} places all of them.
+     *
+     * @param bins the bins to place; not modified
+     * @return {@code true} if all bins fit (always for an empty list); {@code false} if any is left out, including
+     *         any bin with a non-positive dimension, which is never placed
+     * @throws NullPointerException if {@code bins} or one of its elements is {@code null}
      */
     public boolean isValid(List<B> bins) {
         return bins.size() == pack(bins).size();
     }
 
     /**
-     * Places as many of {@code bins} as the shelf heuristic manages, largest area first, and returns their
-     * positions. Bins that do not fit are simply absent; an empty list is returned for empty input or for any bin
-     * with a non-positive dimension. The input list is not modified.
+     * Places as many of {@code bins} as the shelf heuristic manages (see the class description) and returns their
+     * placements. Bins that do not fit are simply absent from the result. A bin with a non-positive length, width or
+     * height is skipped: it is never placed and does not affect the placement of the others. A rotated placement
+     * ({@link Position#rotate()}) occupies the bin's width along the container length and its length along the
+     * container width.
+     *
+     * @param bins the bins to place; neither the list nor the bins are modified
+     * @return a new mutable list of placements in placement order (level by level, row by row), each referring to the
+     *         caller's bin object; empty when {@code bins} is empty or no bin fits
+     * @throws NullPointerException if {@code bins} or one of its elements is {@code null}
      */
     public List<Position<B>> pack(List<B> bins) {
-        if (bins.isEmpty() || bins.stream().anyMatch(b -> b.getLength() <= 0 || b.getWidth() <= 0
-                || b.getHeight() <= 0)) {
+        bins = bins.stream()
+                .filter(b -> b.getLength() > 0 && b.getWidth() > 0 && b.getHeight() > 0)
+                .sorted(Comparator.comparingLong((B o) -> o.getArea()).reversed())
+                .toList();
+        if (bins.isEmpty()) {
             return new ArrayList<>();
         }
-        bins = bins.stream().sorted(Comparator.comparingLong((B o) -> o.getArea()).reversed()).toList();
         int deltaWidth = container.getWidth();
         int deltaHeight = 0;
         int ybl = 0;
@@ -104,7 +156,9 @@ public class BinPacking<C extends Container<C>, B extends Bin<B>> {
                 // Vertical gate: a bin may only sit on this level if the height already consumed by the
                 // levels below plus the bin's own height stays within the container. Without this a taller
                 // upper level (or a single over-tall bin) would be committed before its height was checked.
-                if (deltaHeight + bin.getHeight() > container.getHeight()) {
+                // Written as a subtraction: deltaHeight never exceeds the container height, so this cannot overflow the
+                // way deltaHeight + bin.getHeight() could for a very tall bin.
+                if (bin.getHeight() > container.getHeight() - deltaHeight) {
                     continue;
                 }
                 boolean fitsUnrotated = deltaLength >= bin.getLength() && deltaWidth >= bin.getWidth()

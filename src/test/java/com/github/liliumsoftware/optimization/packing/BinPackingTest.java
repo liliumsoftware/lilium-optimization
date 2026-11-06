@@ -48,6 +48,27 @@ class BinPackingTest {
     }
 
     @Test
+    void aBinWithANonPositiveDimensionIsSkippedAndTheOthersArePacked() {
+        // The bad bin used to empty the whole result. Now only it is left out: the other two are placed exactly as
+        // if it were absent (the larger first at x 0, the smaller after it in the same row), and the batch is still
+        // reported as not valid because one bin is unplaced.
+        TestBin small = new TestBin("small", 4, 5, 10);
+        TestBin large = new TestBin("large", 6, 5, 10);
+        BinPacking<TestContainer, TestBin> packer = packer(10, 10, 10);
+        for (TestBin bad : List.of(new TestBin("l", 0, 5, 5), new TestBin("w", 5, -1, 5),
+                new TestBin("h", 5, 5, 0), new TestBin("all", -1, -1, -1))) {
+            List<TestBin> bins = List.of(small, bad, large);
+
+            assertThat(packer.pack(bins)).as(bad.toString())
+                    .extracting(Position::bin, Position::xbl, Position::ybl, Position::level, Position::rotate)
+                    .containsExactly(tuple(large, 0, 0, 1, false), tuple(small, 6, 0, 1, false));
+            assertThat(packer.pack(bins)).isEqualTo(packer.pack(List.of(small, large)));
+            assertThat(packer.isValid(bins)).isFalse();
+        }
+        assertThat(packer.isValid(List.of(small, large))).isTrue();
+    }
+
+    @Test
     void singleFittingBinIsPlacedAtOrigin() {
         List<Position<TestBin>> positions = packer(100, 100, 100).pack(List.of(new TestBin("a", 10, 10, 10)));
         assertThat(positions).hasSize(1);

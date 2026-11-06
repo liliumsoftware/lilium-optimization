@@ -19,9 +19,17 @@ package com.github.liliumsoftware.optimization.packing;
 import com.github.liliumsoftware.optimization.domain.Bin;
 
 /**
- * Placement of one {@link Bin} inside a container: its bottom-left corner ({@code xbl}, {@code ybl}), the
- * stacking {@code level} (shelf) it sits on, and whether it was {@code rotate}d 90° in the horizontal plane
- * to fit.
+ * Placement of one {@link Bin} inside a container, as produced by {@link BinPacking#pack}: the corner of its
+ * footprint nearest the container origin, the level it sits on, and whether it was rotated 90° in the horizontal
+ * plane to fit. There is no z coordinate: the vertical offset of a level is the sum of the heights of the tallest bin
+ * of each level below it, which callers derive from the placements themselves.
+ *
+ * @param bin    the placed bin: the caller's own object, not a copy
+ * @param xbl    offset of the footprint's corner along the container length (x), in container units
+ * @param ybl    offset of the footprint's corner along the container width (y), in container units
+ * @param level  the level the bin sits on, starting at {@code 1} for the container floor
+ * @param rotate {@code true} if the bin is rotated, so its width runs along x and its length along y
+ * @param <B>    the bin type
  */
 public record Position<B extends Bin<B>>(B bin, int xbl, int ybl, int level, boolean rotate) {
 
