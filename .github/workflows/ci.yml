@@ -8,12 +8,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 21 is the lowest runtime the library supports (maven.compiler.release); 25 is the current LTS.
+        java: [ '21', '25' ]
+    name: build (JDK ${{ matrix.java }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: ${{ matrix.java }}
           cache: maven
       - name: Build, test and verify
         run: ./mvnw -B -ntp clean verify -Pcoverage
@@ -21,6 +27,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: jacoco-report
+          name: jacoco-report-jdk${{ matrix.java }}
           path: target/site/jacoco
           if-no-files-found: ignore
