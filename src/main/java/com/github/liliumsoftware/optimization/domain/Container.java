@@ -17,27 +17,39 @@
 package com.github.liliumsoftware.optimization.domain;
 
 /**
- * The bounding box that {@link Bin}s are packed into; dimensions are integers in a shared unit.
+ * The bounding box that {@link Bin}s are packed into by
+ * {@link com.github.liliumsoftware.optimization.packing.BinPacking}; inner dimensions are integers in the unit shared
+ * with the bins.
+ *
+ * @param <C> the concrete container type (self type)
  */
 public interface Container<C extends Container<C>> {
 
     /**
-     * Inner length (x axis).
+     * Inner length (x axis): the direction along which bins are placed side by side within a row.
+     *
+     * @return the inner length
      */
     int getLength();
 
     /**
-     * Inner width (y axis).
+     * Inner width (y axis): the direction along which rows are laid out on a shelf level.
+     *
+     * @return the inner width
      */
     int getWidth();
 
     /**
-     * Inner height (stacking direction).
+     * Inner height (stacking direction): the shelf levels stack until it is used up.
+     *
+     * @return the inner height
      */
     int getHeight();
 
     /**
-     * A deep, independent copy.
+     * A deep, independent copy. The library itself never calls it.
+     *
+     * @return a new container with the same dimensions
      */
     C copy();
 

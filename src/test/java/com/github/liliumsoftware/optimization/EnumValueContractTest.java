@@ -19,6 +19,8 @@ package com.github.liliumsoftware.optimization;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.optimization.ExchangeRelocateType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,6 +61,18 @@ class EnumValueContractTest {
             assertThat(ExchangeRelocateType.of(type.getValue())).isEqualTo(type);
         }
         assertThatThrownBy(() -> ExchangeRelocateType.of(-1)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 3, 99, Integer.MIN_VALUE, Integer.MAX_VALUE})
+    void unknownPersistedValuesAreRejectedByEveryEnum(int value) {
+        // 0..2 are taken by Type and ExchangeRelocateType, 0..1 by OptimizationType; nothing else may map.
+        assertThatThrownBy(() -> Nodeable.Type.of(value)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(String.valueOf(value));
+        assertThatThrownBy(() -> ExchangeRelocateType.of(value)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(String.valueOf(value));
+        assertThatThrownBy(() -> OptimizationType.of(value)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not found");
     }
 
 }

@@ -17,9 +17,11 @@
 package com.github.liliumsoftware.optimization.domain;
 
 /**
- * Marker for a resource classification. The assignment layer only exchanges/reassigns trackables across
- * <em>different</em> categories, so implementations define whatever grouping (vehicle type, depot, skill)
- * should be treated as interchangeable-versus-not.
+ * Marker for a resource classification (vehicle type, depot, skill, …), returned by
+ * {@code TrackableAssignment#getCategory}. The assignment repair passes only exchange resources between two plans,
+ * or reassign a plan to an idle unit, when the categories <em>differ</em>: units of one category are treated as
+ * interchangeable, so swapping them cannot help. Categories are compared with {@code equals}, so implementations need
+ * value equality (an {@code enum} is the natural choice).
  */
 public interface TrackableCategory {
 }

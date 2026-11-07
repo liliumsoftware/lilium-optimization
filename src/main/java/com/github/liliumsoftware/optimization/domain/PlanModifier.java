@@ -19,19 +19,28 @@ package com.github.liliumsoftware.optimization.domain;
 import java.util.List;
 
 /**
- * Post-processing hook applied to finished plans (e.g. renumbering, annotating, code generation). Runners
- * invoke these after planning completes. The {@code List} overload tolerates a {@code null} list so callers
- * need not guard it.
+ * Post-processing hook applied to finished plans (e.g. renumbering, annotating, assigning plan codes).
+ * {@link com.github.liliumsoftware.optimization.BaseAlgorithmRunner#finalizePlans(List)} hands the plans to each
+ * registered modifier, in registration order; the search algorithms never call modifiers.
+ *
+ * @param <P> the plan type
  */
 public interface PlanModifier<P extends Planable<P, ?, ?>> {
 
     /**
      * Post-processes one finished plan in place.
+     *
+     * @param plan the plan to modify
      */
     void modify(P plan);
 
     /**
-     * Applies {@link #modify(Planable)} to every plan; tolerates a {@code null} list.
+     * Post-processes every plan in place.
+     *
+     * <p>The default applies {@link #modify(Planable)} to every plan in list order, and does nothing for a
+     * {@code null} list, so callers need not guard it.
+     *
+     * @param plans the plans to modify, or {@code null}
      */
     default void modify(List<P> plans) {
         if (plans == null) {

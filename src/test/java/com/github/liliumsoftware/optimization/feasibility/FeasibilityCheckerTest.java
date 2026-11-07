@@ -55,6 +55,13 @@ class FeasibilityCheckerTest {
     }
 
     @Test
+    void theSharedFeasibleResultReturnsOneSharedEmptyParamsArray() {
+        // It used to allocate a new empty array on every call, on the feasibility hot path.
+        assertThat(FeasibilityResult.FEASIBLE.getParams()).isEmpty();
+        assertThat(FeasibilityResult.FEASIBLE.getParams()).isSameAs(FeasibilityResult.FEASIBLE.getParams());
+    }
+
+    @Test
     void aCustomResultIsInfeasibleUnlessItSaysOtherwise() {
         // The interface default is "not feasible", so a checker only has to describe the failure.
         FeasibilityResult custom = new FeasibilityResult() {

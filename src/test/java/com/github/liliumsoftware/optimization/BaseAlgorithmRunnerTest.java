@@ -224,4 +224,139 @@ class BaseAlgorithmRunnerTest {
         assertThat(twoOpt.apply(plan).getNodes()).isNotEmpty();
     }
 
+    // ---------------------------------------------------------------- unplanned nodes: matching by value
+
+    @Test
+    void aValueEqualCopyOfAPlannedCustomerCountsAsPlanned() {
+        // Plans hold deep copies of the customers (moves are built on copies), so matching must be by equals, not by
+        // identity: the caller's original instances must still be recognised as planned.
+        TestRunner runner = runner(List.of());
+        TestNode customerC = TestNode.customer("C", 0, 30, 1);
+        TestPlan plan = new TestPlan("p", List.of(origin, customerB.copy(), customerA.copy()));
+
+        assertThat(runner.unplannedNodes(List.of(plan), List.of(customerA, customerC, customerB)))
+                .containsExactly(customerC);
+    }
+
+    @Test
+    void unplannedNodesKeepTheInputOrderAcrossSeveralPlans() {
+        TestRunner runner = runner(List.of());
+        List<TestNode> customers = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            customers.add(TestNode.customer("N" + i, 0, i + 1, 1));
+        }
+        TestPlan first = new TestPlan("p", List.of(origin, customers.get(6), customers.get(1)));
+        TestPlan second = new TestPlan("q", List.of(origin, customers.get(3)));
+
+        assertThat(runner.unplannedNodes(List.of(first, second), customers))
+                .containsExactly(customers.get(0), customers.get(2), customers.get(4), customers.get(5),
+                        customers.get(7));
+    }
+
+    @Test
+    void everyDuplicateOfAPlannedCustomerIsRemovedAndDuplicatesOfAnUnplannedOneKept() {
+        TestRunner runner = runner(List.of());
+        TestPlan plan = new TestPlan("p", List.of(origin, customerA));
+
+        assertThat(runner.unplannedNodes(List.of(plan), List.of(customerA, customerB, customerA.copy(), customerB)))
+                .containsExactly(customerB, customerB);
+    }
+
+    @Test
+    void onlyThePlansCustomersCountNotItsDepots() {
+        // A node passed in the customer list that a plan only uses as its origin or destination is not served.
+        TestRunner runner = runner(List.of());
+        TestPlan plan = new TestPlan("p", List.of(origin, customerA, destination));
+
+        assertThat(runner.unplannedNodes(List.of(plan), List.of(origin, customerA, destination)))
+                .containsExactly(origin, destination);
+    }
+
+    // ---------------------------------------------------------------- constructors
+
+    @Test
+    void bothConstructorsRejectMissingCollaborators() {
+        MatrixCostCalculation calculation = new MatrixCostCalculation();
+        DateTimePlanCodeGenerator generator = new DateTimePlanCodeGenerator();
+        PlanModifier<TestPlan> modifier = plan -> {};
+
+        assertThatThrownBy(() -> new VarargsRunner(null, generator, modifier))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("costCalculation");
+        assertThatThrownBy(() -> new VarargsRunner(calculation, null, modifier))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("planCodeGenerator");
+        assertThatThrownBy(() -> new VarargsRunner(calculation, generator, modifier, null))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("planModifier");
+        assertThatThrownBy(() -> new TestRunner(null, generator, List.of(), List.of()))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("costCalculation");
+        assertThatThrownBy(() -> new TestRunner(calculation, null, List.of(), List.of()))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("planCodeGenerator");
+        List<PlanModifier<TestPlan>> withNull = new ArrayList<>();
+        withNull.add(modifier);
+        withNull.add(null);
+        assertThatThrownBy(() -> new TestRunner(calculation, generator, List.of(), withNull))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("planModifier");
+    }
+
+    @Test
+    void theVarargsConstructorAppliesItsModifiersInOrder() {
+        List<String> applied = new ArrayList<>();
+        VarargsRunner runner = new VarargsRunner(new MatrixCostCalculation(), new DateTimePlanCodeGenerator(),
+                plan -> applied.add("first"), plan -> applied.add("second"));
+
+        runner.finalizePlans(new ArrayList<>(List.of(new TestPlan("p", List.of(origin, customerA)))));
+
+        assertThat(applied).containsExactly("first", "second");
+        assertThat(new VarargsRunner(new MatrixCostCalculation(), new DateTimePlanCodeGenerator()).planModifiers)
+                .isEmpty();
+    }
+
+    @Test
+    void theListConstructorCopiesTheModifiersSoLaterChangesHaveNoEffect() {
+        List<String> applied = new ArrayList<>();
+        List<PlanModifier<TestPlan>> modifiers = new ArrayList<>();
+        modifiers.add(plan -> applied.add("kept"));
+        TestRunner runner = new TestRunner(new MatrixCostCalculation(), new DateTimePlanCodeGenerator(), List.of(),
+                modifiers);
+
+        modifiers.clear();
+        modifiers.add(plan -> applied.add("added later"));
+        runner.finalizePlans(new ArrayList<>(List.of(new TestPlan("p", List.of(origin, customerA)))));
+
+        assertThat(applied).containsExactly("kept");
+    }
+
+    @Test
+    void theModifierListIsUnmodifiable() {
+        VarargsRunner runner = new VarargsRunner(new MatrixCostCalculation(), new DateTimePlanCodeGenerator(),
+                plan -> {});
+
+        assertThatThrownBy(() -> runner.planModifiers.add(plan -> {}))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(runner.planModifiers::clear).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    /**
+     * A runner built through the varargs constructor, which {@link TestRunner} does not use.
+     */
+    private static final class VarargsRunner extends BaseAlgorithmRunner<TestPlan, TestNode, TestNode> {
+
+        @SafeVarargs
+        // the array only reaches the superclass constructor, which copies it
+        @SuppressWarnings("varargs")
+        private VarargsRunner(MatrixCostCalculation costCalculation, DateTimePlanCodeGenerator generator,
+                PlanModifier<TestPlan>... modifiers) {
+            super(costCalculation, generator, modifiers);
+        }
+
+        @Override
+        public void plan(TestNode node, List<TestNode> customers) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        protected List<BaseAlgorithm> algorithms() {
+            return List.of();
+        }
+    }
+
 }

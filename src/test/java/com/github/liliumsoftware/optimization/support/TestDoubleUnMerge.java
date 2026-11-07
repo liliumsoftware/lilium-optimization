@@ -16,6 +16,7 @@
 
 package com.github.liliumsoftware.optimization.support;
 
+import com.github.liliumsoftware.optimization.OptimizationType;
 import com.github.liliumsoftware.optimization.assignment.TrackableAssignment;
 import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 import com.github.liliumsoftware.optimization.merge.AbstractDoubleUnMergeAlgorithm;
@@ -29,6 +30,11 @@ public final class TestDoubleUnMerge extends AbstractDoubleUnMergeAlgorithm<Test
     public TestDoubleUnMerge(TrackableAssignment<TestPlan, ?> trackableAssignment,
             LocalSearchAlgorithm<TestPlan> localSearchAlgorithm) {
         super(trackableAssignment, localSearchAlgorithm);
+    }
+
+    public TestDoubleUnMerge(TrackableAssignment<TestPlan, ?> trackableAssignment,
+            LocalSearchAlgorithm<TestPlan> localSearchAlgorithm, OptimizationType optimizationType) {
+        super(trackableAssignment, localSearchAlgorithm, optimizationType);
     }
 
     public boolean supportsPair(TestPlan firstPlan, TestPlan secondPlan) {

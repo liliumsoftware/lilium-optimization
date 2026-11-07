@@ -20,7 +20,9 @@ import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.support.ExposedBaseAlgorithm;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +86,28 @@ class IsEqualCollectionTest {
     @Test
     void checkCancelIsQuietBeforeCancel() {
         new ExposedBaseAlgorithm().triggerCheckCancel();   // must not throw
+    }
+
+    @Test
+    void sameSizeWithADifferentNumberOfDistinctElementsIsNotEqual() {
+        // Both have three elements, but {1, 1, 2} has two distinct values and {1, 2, 3} three.
+        assertThat(base.equalCollections(List.of(1, 1, 2), List.of(1, 2, 3))).isFalse();
+        assertThat(base.equalCollections(List.of(1, 2, 3), List.of(1, 1, 2))).isFalse();
+    }
+
+    @Test
+    void nullElementsAreCountedLikeAnyOther() {
+        assertThat(base.equalCollections(Arrays.asList(null, "a", null), Arrays.asList("a", null,
+                null))).isTrue();
+        assertThat(base.equalCollections(Arrays.asList(null, "a"), Arrays.asList("a", "a")))
+                .isFalse();
+    }
+
+    @Test
+    // a distinct String instance proves that elements are matched by equals, not identity
+    @SuppressWarnings("StringOperationCanBeSimplified")
+    void elementsAreMatchedByEqualsNotIdentityAndAnyCollectionTypeWorks() {
+        assertThat(base.equalCollections(List.of(new String("zone")), Set.of("zone"))).isTrue();
     }
 
 }

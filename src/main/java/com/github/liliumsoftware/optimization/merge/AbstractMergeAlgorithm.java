@@ -23,6 +23,7 @@ import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
 import com.github.liliumsoftware.optimization.domain.Trackable;
+import com.github.liliumsoftware.optimization.exception.CancelException;
 import com.github.liliumsoftware.optimization.localsearch.LocalSearchAlgorithm;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,38 +32,55 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Fuses two compatible plans into one whenever doing so lowers total cost.
+ * Fuses two plans into one whenever that lowers the total cost and the resources can still be assigned.
  *
- * <p>A merge drops the first plan's destination and the second plan's origin, concatenates the
- * remaining node sequences into the first plan, re-optimizes it with local search, then re-assigns
- * trackables across the shrunken plan set. The candidate is accepted only if resource assignment
- * succeeds ({@link TrackableAssignment#assignAndExchange}) <em>and</em> summed cost strictly
- * improves; on acceptance the caller's {@code plans} list is mutated in place. By default merging is
- * restricted to plans in neighbouring zones (see {@link #supports(Planable, Planable)}).
+ * <p>A merge of a first plan with a second plan, built on copies of the whole list, drops the first plan's destination
+ * and the second plan's origin and appends the second plan's remaining stops to the first; when the plans differ in
+ * shape, a depot stop the merged route would otherwise lose (the second plan's origin, the first plan's destination)
+ * is kept. The merged plan goes through the local search, the second plan is removed, and the resources of the
+ * shrunken set are re-assigned with {@link TrackableAssignment#assignAndExchange}. The candidate is accepted only if
+ * that assignment succeeds and {@link #compare} reports a strict improvement. By default only plans in neighbouring
+ * zones are merged ({@link #supports(Planable, Planable)}).
  *
- * <p>The outer scan restarts from the top on every accepted merge ({@code i = -1; break}) and
- * settles when no further improving merge exists. {@code cancel()} aborts the scan with a
- * {@link com.github.liliumsoftware.optimization.exception.CancelException}, {@code interrupt()} ends it with the merges
- * accepted so far; both are forwarded to the local search.
+ * <p>{@link #apply(List)} scans the unordered plan pairs, tries both orientations of each and restarts from the first
+ * pair after every accepted merge. It terminates whatever {@link #compare} does, because every accepted merge removes
+ * a plan from the list. The list passed in is mutated by replacing its contents; the caller's plan objects are never
+ * modified. {@link #cancel()} aborts with a {@link CancelException}; {@link #interrupt()} is polled before every pair
+ * and returns the list with the merges accepted so far. Both signals are forwarded to the local search. The class
+ * holds no mutable state beyond the signal flags, so one instance may run on independent lists concurrently.
  *
- * @param <P> plan type
- * @param <N> node type
- * @param <T> trackable (resource) type
+ * @param <P> the plan type
+ * @param <N> the node type
+ * @param <T> the trackable (resource) type
  */
 @Slf4j
 @RequiredArgsConstructor
 public abstract class AbstractMergeAlgorithm<P
         extends Planable<P, N, T>, N extends Nodeable<N>, T extends Trackable<T>> extends BaseAlgorithm {
 
+    /**
+     * Supplies the zone neighbourhood used by {@link #supports(Planable, Planable)}.
+     */
     protected final PathCostCalculation<P, N, ?> costCalculation;
+    /**
+     * Re-assigns the resources of every candidate plan set; a merge whose plans cannot all be assigned is rejected.
+     */
     protected final TrackableAssignment<P, T> trackableAssignment;
+    /**
+     * Improves every merged plan before the merge is judged.
+     */
     protected final LocalSearchAlgorithm<P> localSearchAlgorithm;
 
     /**
-     * Scans all ordered plan pairs, merging any pair that improves cost, and restarts from the
-     * start after each accepted merge until a fixed point (or interruption) is reached.
+     * Scans every unordered plan pair in list order, merging the first pair that improves the cost, and restarts from
+     * the first pair after each accepted merge, until a full scan merges nothing or the algorithm is interrupted.
+     * Plans rejected by {@link #supports(Planable)} are skipped.
      *
-     * @return the same {@code plans} instance, mutated in place
+     * @param plans the plans to merge; a mutable list owned by the caller, whose contents are replaced by the merged
+     *              copies (the plan objects themselves are not modified)
+     * @return {@code plans}
+     * @throws CancelException     if the search was cancelled
+     * @throws ArithmeticException if a summed cost does not fit a {@code long}
      */
     public List<P> apply(List<P> plans) {
         for (int i = 0; i < plans.size(); i++) {
@@ -91,10 +109,15 @@ public abstract class AbstractMergeAlgorithm<P
     }
 
     /**
-     * Attempts to merge the pair, trying both orientations (first+second, then second+first) since
-     * concatenation is directional (destination-of-A joined to customers-of-B).
+     * Tries to merge the pair in both orientations, since concatenation is directional: {@code secondPlan} appended to
+     * {@code firstPlan}, then, if that was not accepted, {@code firstPlan} appended to {@code secondPlan}.
      *
-     * @return {@code true} if either orientation was accepted and {@code plans} was updated
+     * @param plans      the plans being merged; its contents are replaced when a merge is accepted
+     * @param firstPlan  an element of {@code plans}
+     * @param secondPlan another element of {@code plans}
+     * @return {@code true} if a merge was accepted and {@code plans} changed
+     * @throws CancelException     if the search was cancelled
+     * @throws ArithmeticException if a summed cost does not fit a {@code long}
      */
     protected boolean apply(List<P> plans, P firstPlan, P secondPlan) {
         if (firstPlan.equals(secondPlan)) {
@@ -111,11 +134,17 @@ public abstract class AbstractMergeAlgorithm<P
     }
 
     /**
-     * Builds the merged candidate on deep copies (first plan absorbs the second, second removed),
-     * re-assigns trackables, and commits only on cost improvement — otherwise leaves {@code plans}
-     * untouched.
+     * Builds the merge of {@code secondPlan} into {@code firstPlan} on copies of the whole list (see the class
+     * description), re-assigns the resources and, if the assignment succeeds and {@link #compare} prefers the
+     * candidate, replaces the contents of {@code plans} with it. Nothing is changed when
+     * {@link #supports(Planable, Planable)} rejects the pair or the candidate is not accepted.
      *
-     * @return {@code true} if the merge was accepted and committed
+     * @param plans      the plans being merged
+     * @param firstPlan  the element of {@code plans} that absorbs the other
+     * @param secondPlan the element of {@code plans} that is absorbed and removed
+     * @return {@code true} if the merge was accepted and {@code plans} changed
+     * @throws CancelException     if the local search was cancelled
+     * @throws ArithmeticException if a summed cost does not fit a {@code long}
      */
     protected boolean merge(List<P> plans, P firstPlan, P secondPlan) {
         if (supports(firstPlan, secondPlan)) {
@@ -145,7 +174,9 @@ public abstract class AbstractMergeAlgorithm<P
             if (trackableAssignment.assignAndExchange(tempPlans) && compare(tempPlans, plans)) {
                 plans.clear();
                 plans.addAll(tempPlans);
-                log.debug(getMessage(firstPlan, secondPlan));
+                if (log.isDebugEnabled()) {
+                    log.debug(getMessage(firstPlan, secondPlan));
+                }
                 return true;
             }
         }
@@ -153,35 +184,54 @@ public abstract class AbstractMergeAlgorithm<P
     }
 
     /**
-     * Per-plan eligibility gate; override to exclude plans from merging (default: all eligible).
+     * Whether {@code plan} may take part in a merge at all. The default implementation returns {@code true}.
+     *
+     * @param plan an element of the list being merged
+     * @return {@code true} if {@code plan} may be merged
      */
     protected boolean supports(P plan) {
         return true;
     }
 
     /**
-     * Pairwise eligibility; by default only plans in neighbouring zones may be merged.
+     * Whether {@code secondPlan} may be merged into {@code firstPlan}. The default implementation requires
+     * {@code secondPlan}'s zone to be a neighbour of {@code firstPlan}'s ({@link PathCostCalculation#isNeighbor}).
+     *
+     * @param firstPlan  the plan that would absorb the other
+     * @param secondPlan the plan that would be absorbed
+     * @return {@code true} if the merge may be built and judged
      */
     protected boolean supports(P firstPlan, P secondPlan) {
         return costCalculation.isNeighbor(firstPlan.getZone(), secondPlan.getZone());
     }
 
     /**
-     * Acceptance criterion: the candidate set must have strictly lower summed cost.
+     * Whether the merged set {@code newPlans} is accepted over {@code oldPlans}. The default implementation accepts a
+     * strictly lower {@link CostCalculation#totalCost summed cost}.
+     *
+     * @param newPlans the candidate set, one plan shorter than {@code oldPlans}
+     * @param oldPlans the current list
+     * @return {@code true} to accept {@code newPlans}
+     * @throws ArithmeticException if a summed cost does not fit a {@code long} (default implementation)
      */
     protected boolean compare(List<P> newPlans, List<P> oldPlans) {
         return CostCalculation.totalCost(newPlans) < CostCalculation.totalCost(oldPlans);
     }
 
     /**
-     * Debug message logged on an accepted merge; override to describe the merged pair.
+     * The message logged at DEBUG level for an accepted merge; only called when DEBUG is enabled. The default
+     * implementation returns {@code "Merge plans"}.
+     *
+     * @param firstPlan  the plan that absorbed the other (the original element, not the merged copy)
+     * @param secondPlan the plan that was absorbed
+     * @return the log message
      */
     protected String getMessage(P firstPlan, P secondPlan) {
         return "Merge plans";
     }
 
     /**
-     * Propagates cancellation to the nested local-search algorithm before cancelling itself.
+     * Requests an abort of this algorithm and of its local search; see {@link BaseAlgorithm#cancel()}.
      */
     @Override
     public void cancel() {
@@ -190,7 +240,7 @@ public abstract class AbstractMergeAlgorithm<P
     }
 
     /**
-     * Propagates the graceful stop to the nested local search before interrupting itself.
+     * Requests a graceful stop of this algorithm and of its local search; see {@link BaseAlgorithm#interrupt()}.
      */
     @Override
     public void interrupt() {
