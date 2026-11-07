@@ -418,7 +418,20 @@
             <property name="target" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF,
                                   VARIABLE_DEF, RECORD_DEF, COMPACT_CTOR_DEF"/>
         </module>
+        <!-- Main sources: stricter than Google's configuration, every documented public/protected method and constructor
+             lists all its parameters and its return value (javadoc's own "missing" check cannot be used, because it
+             also sees the Lombok-generated members of the delomboked sources). Test sources keep Google's lenient
+             variant; checkstyle-suppressions.xml routes each file to one of the two. -->
         <module name="JavadocMethod">
+            <property name="id" value="JavadocMethodMain"/>
+            <property name="accessModifiers" value="public, protected"/>
+            <property name="allowMissingParamTags" value="false"/>
+            <property name="allowMissingReturnTag" value="false"/>
+            <property name="allowedAnnotations" value="Override, Test"/>
+            <property name="tokens" value="METHOD_DEF, CTOR_DEF, ANNOTATION_FIELD_DEF, COMPACT_CTOR_DEF"/>
+        </module>
+        <module name="JavadocMethod">
+            <property name="id" value="JavadocMethodTest"/>
             <property name="accessModifiers" value="public, protected"/>
             <property name="allowMissingParamTags" value="true"/>
             <property name="allowMissingReturnTag" value="true"/>

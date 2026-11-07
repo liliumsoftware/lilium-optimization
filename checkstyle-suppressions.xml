@@ -6,4 +6,8 @@
     <!-- Test sources: the public methods of test fixtures (TestPlan, TestNode, ...) need no Javadoc; every other check,
          Javadoc style included, applies to tests as to main sources. @Test methods are exempt by checkstyle.xml. -->
     <suppress checks="MissingJavadocMethod" files="[\\/]src[\\/]test[\\/]"/>
+    <!-- Main sources list every @param and @return (JavadocMethodMain); test fixtures may document a method in prose
+         only (JavadocMethodTest, Google's default). -->
+    <suppress id="JavadocMethodMain" files="[\\/]src[\\/]test[\\/]"/>
+    <suppress id="JavadocMethodTest" files="[\\/]src[\\/]main[\\/]"/>
 </suppressions>
