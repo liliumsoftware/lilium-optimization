@@ -17,16 +17,21 @@
 package com.github.liliumsoftware.optimization.feasibility;
 
 /**
- * Outcome of checking a single plan's feasibility. An infeasible result carries a message {@code cause} key
- * plus {@code params} for localization. The shared {@link #FEASIBLE} singleton avoids allocating on the hot
- * path, where the common case is "feasible".
+ * Outcome of checking a single plan's feasibility with {@link FeasibilityChecker#getResult}. An infeasible result
+ * carries a message {@link #getCause() cause} key plus {@link #getParams() params} for localization, which
+ * {@link FeasibilityChecker#getErrors(java.util.List)} resolves through {@link FeasibilityChecker#getMessage}. The
+ * shared {@link #FEASIBLE} instance lets the common, feasible case avoid allocating a result object on the hot path.
  */
 public interface FeasibilityResult {
 
     /**
-     * Shared feasible outcome; reused to avoid per-check allocation in the search loops.
+     * Shared feasible outcome: {@link #isFeasible()} is {@code true}, {@link #getCause()} is {@code null} and
+     * {@link #getParams()} returns one shared empty array on every call (nothing is allocated per call; an empty
+     * array has no elements to change, so sharing it is safe). Stateless, so it may be returned from any thread.
      */
     FeasibilityResult FEASIBLE = new FeasibilityResult() {
+        private static final Object[] NO_PARAMS = {};
+
         @Override
         public boolean isFeasible() {
             return true;
@@ -39,24 +44,32 @@ public interface FeasibilityResult {
 
         @Override
         public Object[] getParams() {
-            return new Object[0];
+            return NO_PARAMS;
         }
     };
 
     /**
-     * Whether the plan passed; {@code false} by default so a custom result is infeasible unless it says otherwise.
+     * Whether the plan passed.
+     *
+     * <p>The default returns {@code false}, so a custom result is infeasible unless it says otherwise.
+     *
+     * @return {@code true} if the plan is feasible
      */
     default boolean isFeasible() {
         return false;
     }
 
     /**
-     * Message key of the violated constraint, or {@code null} when feasible.
+     * Message key of the violated constraint.
+     *
+     * @return the key, or {@code null} when feasible
      */
     String getCause();
 
     /**
-     * Message parameters for {@link #getCause()}; never {@code null}.
+     * Message parameters for {@link #getCause()}.
+     *
+     * @return the parameters; should never be {@code null} (use an empty array)
      */
     Object[] getParams();
 

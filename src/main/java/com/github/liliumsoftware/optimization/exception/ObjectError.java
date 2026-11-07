@@ -17,7 +17,13 @@
 package com.github.liliumsoftware.optimization.exception;
 
 /**
- * A validation/feasibility error: a human-readable {@code defaultMessage} bound to the offending {@code objectName}.
+ * A user-facing error bound to the object it concerns, in the shape of a validation framework's object error.
+ * {@link com.github.liliumsoftware.optimization.feasibility.FeasibilityChecker#getErrors(java.util.List)} produces
+ * one per infeasible plan. Despite the package, this is a value, not an exception.
+ *
+ * @param defaultMessage the resolved, human-readable message
+ * @param objectName     the code of the offending object (for an infeasible plan: its resource's code, or the plan's
+ *                       own code while it has no resource)
  */
 public record ObjectError(String defaultMessage, String objectName) {
 

@@ -273,6 +273,11 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <!-- Every lint category except "processing" (it only reports that no processor claimed the
+                             Jackson annotations, which is expected). -->
+                        <arg>-Xlint:all,-processing</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -367,14 +372,16 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
-                    <!-- Fail the build on real Javadoc errors (broken references, malformed HTML). The
-                         missing-documentation check is off so hook-method templates need not repeat the obvious. -->
-                    <!-- Javadoc runs on the delomboked sources (see the delombok execution above), so the
-                         getters, setters and constructors Lombok generates appear in the API docs. -->
+                    <!-- Javadoc runs on the delomboked sources (see the delombok execution above), so the getters,
+                         setters and constructors Lombok generates appear in the API docs, carrying the Javadoc of
+                         their fields. Generated constructors have no Javadoc of their own, so doclint's "missing"
+                         group is off; completeness of hand-written Javadoc (@param, @return) is enforced by
+                         Checkstyle's JavadocMethod on the real sources instead. Any other doclint finding (broken
+                         reference, malformed HTML) fails the build. -->
                     <sourcepath>${project.build.directory}/delombok</sourcepath>
                     <doclint>all,-missing</doclint>
                     <failOnError>true</failOnError>
-                    <failOnWarnings>false</failOnWarnings>
+                    <failOnWarnings>true</failOnWarnings>
                     <quiet>true</quiet>
                 </configuration>
                 <executions>

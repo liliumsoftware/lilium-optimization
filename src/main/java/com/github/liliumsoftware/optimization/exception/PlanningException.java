@@ -16,10 +16,22 @@
 
 package com.github.liliumsoftware.optimization.exception;
 
+import java.io.Serial;
+
 /**
- * Unchecked failure raised when a planning run cannot complete.
+ * Unchecked failure for a planning run that cannot complete. The library itself never throws it (its algorithms
+ * report bad input with {@link IllegalArgumentException} / {@link IllegalStateException} and aborts with
+ * {@link CancelException}); it is offered to consumers'
+ * {@link com.github.liliumsoftware.optimization.BaseAlgorithmRunner} implementations as a common type for their own
+ * planning failures.
  */
 public class PlanningException extends RuntimeException {
+
+    /**
+     * Pinned to the value the JVM computed for the 3.0.1 release, so instances serialized by it still read back.
+     */
+    @Serial
+    private static final long serialVersionUID = 4311213161005661931L;
 
     /**
      * Creates an exception without a cause.
@@ -31,7 +43,10 @@ public class PlanningException extends RuntimeException {
     }
 
     /**
-     * Wraps an underlying failure.
+     * Wraps an underlying failure; the message is the cause's {@code toString()}, or {@code null} without a
+     * cause.
+     *
+     * @param e the underlying failure, or {@code null}
      */
     public PlanningException(Throwable e) {
         super(e);
@@ -39,6 +54,9 @@ public class PlanningException extends RuntimeException {
 
     /**
      * Wraps an underlying failure with a message.
+     *
+     * @param msg what could not be planned
+     * @param e   the underlying failure
      */
     public PlanningException(String msg, Throwable e) {
         super(msg, e);

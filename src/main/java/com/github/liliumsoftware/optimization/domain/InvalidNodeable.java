@@ -18,15 +18,28 @@ package com.github.liliumsoftware.optimization.domain;
 
 /**
  * A node that pre-planning validation rejected, carrying the {@link #getCause() reason} it was excluded.
- * Defaults to {@link Type#CUSTOMER} since only customers are validated before planning.
+ * {@link com.github.liliumsoftware.optimization.validation.ValidationChecker} produces these through its
+ * {@code toInvalidNode} hook; they never take part in planning.
+ *
+ * @param <N> the concrete invalid-node type (self type)
  */
 public interface InvalidNodeable<N extends InvalidNodeable<N>> extends Nodeable<N> {
 
     /**
      * Human-readable reason the node was rejected.
+     *
+     * @return the reason, typically the resolved messages of every violated rule
      */
     String getCause();
 
+    /**
+     * The role of the rejected node.
+     *
+     * <p>The default returns {@link Type#CUSTOMER}, since only customers are validated before planning.
+     *
+     * @return {@link Type#CUSTOMER} unless overridden
+     */
+    @Override
     default Type getType() {
         return Type.CUSTOMER;
     }
