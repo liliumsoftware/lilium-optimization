@@ -18,6 +18,7 @@ package com.github.liliumsoftware.optimization.cluster;
 
 import com.github.liliumsoftware.optimization.BaseAlgorithm;
 import com.github.liliumsoftware.optimization.assignment.TrackableAssignment;
+import com.github.liliumsoftware.optimization.calculation.CostCalculation;
 import com.github.liliumsoftware.optimization.calculation.PathCostCalculation;
 import com.github.liliumsoftware.optimization.domain.Nodeable;
 import com.github.liliumsoftware.optimization.domain.Planable;
@@ -35,40 +36,85 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * K-medoids clustering used as a plan seeding/re-seeding step. Each round takes the current plans' medoids
- * (the most central customer of each, from the cost matrix), rebuilds one seed plan per medoid, and greedily
- * assigns every other customer to its nearest feasible medoid's plan via the insertion algorithm. It repeats
- * until the medoid set stops changing, so the number of clusters is fixed by the number of input plans rather
- * than chosen by the algorithm. "Stops changing" is checked as set equality against every earlier round's medoid set
- * (a repeated set ends the loop, so it always terminates); a round whose medoids are merely a subset of an earlier set
- * — for example because a seed found no resource — is not a fixed point and the loop goes on. Between medoids that are
- * equally close to a customer, the earlier seed is tried first.
+ * K-medoids clustering used as a plan seeding/re-seeding step.
  *
- * <p><strong>Customers that cannot be placed are left out.</strong> A customer whose zone neighbours no medoid's
- * zone, or that no medoid plan can feasibly absorb, is absent from the returned plans; it stays unplanned. Callers
- * recover such customers by diffing the result against their input (see
- * {@code BaseAlgorithmRunner#getUnplannedNodes}). No customer is ever duplicated.
+ * <p>Each round takes the current plans' medoids (the customer of each plan with the smallest summed cost to the plan's
+ * other customers, see {@link PathCostCalculation#getMedoid}), builds one seed plan per medoid ({@link #getNewPlan})
+ * and assigns the seeds resources in order, skipping a seed the fleet cannot serve together with the seeds accepted
+ * before it (its medoid then becomes an ordinary customer). Every other customer — those of the current plans, the
+ * customers of the input plans an earlier round could not place, and the caller's {@code unplannedNodes} — is then
+ * offered to the seeds: customers nearest to some medoid go first, and each
+ * tries the medoids its zone neighbours ({@link #getMedoids}) from nearest to farthest, joining the first seed plan the
+ * insertion algorithm can extend and the fleet can still serve ({@link TrackableAssignment#assign(List)} over the whole
+ * set). Between medoids that are equally close to a customer, the earlier seed is tried first.
+ *
+ * <p>The rounds repeat until the medoid set stops changing, so the number of clusters is fixed by the number of input
+ * plans rather than chosen by the algorithm. "Stops changing" is checked as set equality against every earlier
+ * round's medoid set (a repeated set ends the loop, so it always terminates); a round whose medoids are merely a
+ * subset of an earlier set — for example because a seed found no resource — is not a fixed point and the loop goes
+ * on.
+ *
+ * <p><strong>The best round is returned.</strong> Among the rounds that placed at least one customer, the result is
+ * the plan set serving the most customers, ties broken by the lowest {@link CostCalculation#totalCost total cost} and
+ * then by the earliest round. The input plans are not a candidate: they are returned only when no round placed a
+ * customer. A customer whose zone neighbours no medoid's zone, or that no seed plan can feasibly absorb, is absent
+ * from that round's plans, but it is offered again in every later round. The result may still serve fewer customers
+ * than the input even when the input plans were feasible. Callers recover such customers by diffing the result
+ * against their input (see {@code BaseAlgorithmRunner#getUnplannedNodes}). No customer is duplicated as long as node
+ * copies are {@code equals} to their source (the {@code Nodeable} contract).
+ *
+ * <p><strong>Signals.</strong> The algorithm itself never calls {@link #checkCancel()}: a {@code cancel()} takes effect
+ * inside the nested insertion algorithm, which it propagates to. {@code interrupt()} is polled at the start of each
+ * round: an interrupted run returns the best round completed so far (the input plans when none placed a customer).
+ *
+ * <p><strong>Thread-safety.</strong> The instance holds only its collaborators and the two {@link BaseAlgorithm}
+ * flags; {@link #apply} may run concurrently on independent inputs as far as the collaborators allow.
+ *
+ * @param <P> the plan/route type
+ * @param <N> the node/stop type
  */
 @Slf4j
 @RequiredArgsConstructor
 public abstract class AbstractKMedoidsAlgorithm<P
         extends Planable<P, N, ?>, N extends Nodeable<N>> extends BaseAlgorithm {
 
+    /**
+     * The cost model: medoids, customer-to-medoid costs and the zone neighbourhood.
+     */
     protected final PathCostCalculation<P, N, ?> costCalculation;
+    /**
+     * Assigns resources to the seed plans and validates every enlarged plan set.
+     */
     protected final TrackableAssignment<P, ?> trackableAssignment;
+    /**
+     * Inserts each customer into a seed plan at its best feasible position.
+     */
     protected final AbstractInsertionAlgorithm<P, N, ?> insertionAlgorithm;
 
     /**
      * Re-seeds {@code plans} (plus {@code unplannedNodes}) around their medoids as described in the class
-     * documentation and returns the resulting plans, which may omit customers that could not be placed.
+     * documentation and returns the best round's plans (most customers served, then lowest total cost, then earliest
+     * round), which may omit customers that could not be placed. Neither the caller's list nor its plans are
+     * modified; the returned list is the caller's {@code plans} itself when no round placed a customer (or the run was
+     * interrupted before one did).
      *
+     * @param origin         the depot the seed plans start from
+     * @param unplannedNodes customers not in any plan that should be offered to the seeds in every round; not modified
+     * @param plans          the current plans, each with at least one customer; its size fixes the number of clusters
+     * @return the plans of the best round that placed a customer, or {@code plans}
      * @throws IllegalArgumentException if any input plan has no customers (it has no medoid), or if two customers of
      *                                  the plans and {@code unplannedNodes} share a code
+     * @throws ArithmeticException      if a plan's medoid cost sum, or the total cost of a round's plans, does not
+     *                                  fit a {@code long}
+     * @throws com.github.liliumsoftware.optimization.exception.CancelException if the insertion algorithm is cancelled
+     *     or the running thread is interrupted during an insertion
      */
     public List<P> apply(N origin, List<N> unplannedNodes, List<P> plans) {
         List<N> allCustomers = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream()).toList());
         allCustomers.addAll(unplannedNodes);
         requireDistinctCodes(allCustomers);
+        List<P> input = plans;
+        List<P> best = null;
         List<List<N>> historyMedoids = new ArrayList<>();
         while (!isInterrupted()) {
             List<N> medoids = plans.stream().map(costCalculation::getMedoid).toList();
@@ -89,8 +135,15 @@ public abstract class AbstractKMedoidsAlgorithm<P
                 // leaves the new seed without a resource, so the accepted set stays consistently assigned
             }
 
+            // The customers of the current plans first, then every other customer in input order: those an earlier
+            // round could not place are offered again, just like the caller's unplannedNodes.
             List<N> otherNodes = new ArrayList<>(plans.stream().flatMap(p -> p.getCustomers().stream()).toList());
-            otherNodes.addAll(unplannedNodes);
+            Set<String> offered = otherNodes.stream().map(Nodeable::getCode).collect(Collectors.toSet());
+            for (N customer : allCustomers) {
+                if (!offered.contains(customer.getCode())) {
+                    otherNodes.add(customer);
+                }
+            }
             otherNodes.removeAll(seededMedoids);
 
             // insertion order (not hash order) so equal-cost candidates are considered in input order
@@ -111,6 +164,7 @@ public abstract class AbstractKMedoidsAlgorithm<P
                             .sorted(Map.Entry.comparingByValue()).toList().stream().map(Map.Entry::getKey)
                             .toList())).toList();
 
+            boolean placed = false;
             for (Map.Entry<N, List<N>> nMedoids : nodeMedoids) {
                 for (N medoid : nMedoids.getValue()) {
                     List<P> initialPlan = new ArrayList<>();
@@ -125,48 +179,88 @@ public abstract class AbstractKMedoidsAlgorithm<P
                     }
                     // Validate the plan set *with* the enlarged plan: resources are assigned against the candidate,
                     // not against the set it is about to replace, so a vehicle can never end up over capacity.
-                    List<P> candidatePlans = new ArrayList<>(initialPlans);
-                    candidatePlans.set(initialPlans.indexOf(plan), initialPlan.getFirst());
+                    // On copies of the other plans: assign(List) re-assigns every plan in place, and a refused
+                    // attempt must not leave a plan of the accepted set on another unit, or on none.
+                    List<P> candidatePlans = new ArrayList<>(initialPlans.size());
+                    for (P accepted : initialPlans) {
+                        candidatePlans.add(accepted == plan ? initialPlan.getFirst() : accepted.copy());
+                    }
                     if (trackableAssignment.assign(candidatePlans)) {
                         initialPlans = candidatePlans;
-                        plans = initialPlans;
+                        placed = true;
                         break;
                     }
                 }
             }
 
-            log.debug(getMessage(plans));
+            // A round that placed no customer leaves the plans as they were, so the next medoid set repeats.
+            if (placed) {
+                plans = initialPlans;
+                if (best == null || isBetter(plans, best)) {
+                    best = plans;
+                }
+            }
 
-            List<P> finalPlans = plans;
-            Set<N> finalMedoids = new HashSet<>(finalPlans.stream().map(costCalculation::getMedoid).toList());
+            if (log.isDebugEnabled()) {
+                log.debug(getMessage(plans));
+            }
+
+            Set<N> finalMedoids = new HashSet<>(plans.stream().map(costCalculation::getMedoid).toList());
             if (historyMedoids.stream().anyMatch(history -> new HashSet<>(history).equals(finalMedoids))) {
-                return plans;
+                break;
             }
         }
-        return plans;
+        return best == null ? input : best;
     }
 
     /**
-     * The medoids whose zone neighbours the zone of {@code node}: the clusters it may join.
+     * Whether {@code candidate} is a strictly better round result than {@code best}: more customers served, or as many
+     * at a lower {@link CostCalculation#totalCost total cost}. Ties keep the earlier round.
+     */
+    private boolean isBetter(List<P> candidate, List<P> best) {
+        long candidateCustomers = candidate.stream().mapToLong(Planable::getCustomerCount).sum();
+        long bestCustomers = best.stream().mapToLong(Planable::getCustomerCount).sum();
+        if (candidateCustomers != bestCustomers) {
+            return candidateCustomers > bestCustomers;
+        }
+        return CostCalculation.totalCost(candidate) < CostCalculation.totalCost(best);
+    }
+
+    /**
+     * The medoids whose zone neighbours the zone of {@code node}: the clusters it may join. The default asks
+     * {@link PathCostCalculation#isNeighbor isNeighbor(medoidZone, nodeZone)}, which is directed and literal under
+     * {@code LOCATION_ZONE}.
+     *
+     * @param node    the customer to place
+     * @param medoids the seeded medoids, in seed order
+     * @return the admissible medoids, in seed order
      */
     protected List<N> getMedoids(N node, List<N> medoids) {
         return medoids.stream().filter(m -> costCalculation.isNeighbor(m.getZone(), node.getZone())).toList();
     }
 
     /**
-     * The debug message logged after a round.
+     * The debug message logged after a round; only called when debug logging is enabled.
+     *
+     * @param plans the plans after the round
+     * @return the message
      */
     protected String getMessage(List<P> plans) {
         return "Cluster plans";
     }
 
     /**
-     * A seed plan from {@code origin} serving only {@code customer}.
+     * Builds a seed plan from {@code origin} serving only {@code customer}; its resource is assigned afterwards.
+     *
+     * @param origin   the depot
+     * @param customer the medoid; the plan's customers must contain an object {@code equals} to it
+     * @return a new plan
      */
     protected abstract P getNewPlan(N origin, N customer);
 
     /**
-     * Propagates cancellation to the nested insertion algorithm before cancelling itself.
+     * Propagates cancellation to the nested insertion algorithm before cancelling itself; the cancel takes effect at
+     * the insertion's next probe.
      */
     @Override
     public void cancel() {
@@ -175,8 +269,9 @@ public abstract class AbstractKMedoidsAlgorithm<P
     }
 
     /**
-     * Propagates the graceful stop to the nested insertion algorithm before interrupting itself; {@link #apply} then
-     * returns the plans of the round in progress.
+     * Propagates the graceful stop to the nested insertion algorithm before interrupting itself; {@link #apply}
+     * finishes the round in progress and returns the best round so far (see {@link #apply}) instead of starting
+     * another.
      */
     @Override
     public void interrupt() {
