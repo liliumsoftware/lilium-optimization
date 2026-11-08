@@ -13,9 +13,13 @@ indent_style = space
 indent_size = 4
 max_line_length = 120
 ij_continuation_indent_size = 8
+# CustomImportOrder: third-party, then java/javax, then static, with a blank line between groups
 ij_java_imports_layout = *, |, java.**, javax.**, |, $*
 ij_java_class_count_to_use_import_on_demand = 999
 ij_java_names_count_to_use_import_on_demand = 999
+# Imports are class-level and javadoc names the simple type; a completion would otherwise write the FQN
+# (3: shorten names always and add an import; UnusedImports counts Javadoc references as uses)
+ij_java_class_names_in_javadoc = 3
 ij_java_align_multiline_parameters = false
 # Javadoc is wrapped by hand: IntelliJ's Javadoc re-flow is not stable around inline tags and leaves one-word lines
 ij_java_doc_enable_formatting = false
@@ -28,8 +32,70 @@ ij_java_keep_simple_blocks_in_one_line = false
 ij_java_keep_simple_methods_in_one_line = false
 ij_java_keep_simple_classes_in_one_line = false
 ij_java_space_before_array_initializer_left_brace = true
+# Pinned explicitly so the result does not depend on the IDE-level default scheme of whoever reformats.
+# Braces: LeftCurly (eol) and RightCurly (same line as else/catch/finally)
+ij_java_class_brace_style = end_of_line
+ij_java_method_brace_style = end_of_line
+ij_java_lambda_brace_style = end_of_line
+ij_java_block_brace_style = end_of_line
+ij_java_else_on_new_line = false
+ij_java_catch_on_new_line = false
+ij_java_finally_on_new_line = false
+ij_java_while_on_new_line = false
+# Empty lambdas such as "plan -> { }" stay on one line (WhitespaceAround allows empty lambdas)
+ij_java_keep_simple_lambdas_in_one_line = true
+# ParenPad and MethodParamPad: no padding inside or before parentheses
+ij_java_spaces_within_parentheses = false
+ij_java_spaces_within_method_call_parentheses = false
+ij_java_spaces_within_method_parentheses = false
+ij_java_spaces_within_if_parentheses = false
+ij_java_spaces_within_for_parentheses = false
+ij_java_spaces_within_while_parentheses = false
+ij_java_spaces_within_switch_parentheses = false
+ij_java_spaces_within_try_parentheses = false
+ij_java_spaces_within_catch_parentheses = false
+ij_java_spaces_within_synchronized_parentheses = false
+ij_java_spaces_within_cast_parentheses = false
+ij_java_spaces_within_annotation_parentheses = false
+ij_java_space_before_method_call_parentheses = false
+ij_java_space_before_method_parentheses = false
+ij_java_space_before_annotation_parameter_list = false
+# Indentation: wrapped lines at +8, never aligned under an opening element
+ij_java_align_multiline_parameters_in_calls = false
+ij_java_align_multiline_binary_operation = false
+ij_java_align_multiline_ternary_operation = false
+ij_java_align_multiline_assignment = false
+ij_java_align_multiline_extends_list = false
+ij_java_align_multiline_throws_list = false
+ij_java_align_multiline_array_initializer_expression = false
+ij_java_align_multiline_chained_methods = false
+ij_java_align_multiline_parenthesized_expression = false
+ij_java_align_multiline_annotation_parameters = false
+ij_java_align_multiline_method_parentheses = false
+ij_java_align_consecutive_variable_declarations = false
+ij_java_align_consecutive_assignments = false
+ij_java_align_group_field_declarations = false
+ij_java_align_subsequent_simple_methods = false
+# AnnotationLocation: type annotations each on their own line
+ij_java_class_annotation_wrap = split_into_lines
 ij_java_blank_lines_after_imports = 1
+# EmptyLineSeparator allows no run of blank lines; IntelliJ keeps two by default
+ij_java_keep_blank_lines_in_code = 1
+ij_java_keep_blank_lines_in_declarations = 1
+ij_java_keep_blank_lines_before_right_brace = 1
+# OperatorWrap: a wrapped line starts with the operator
+ij_java_binary_operation_sign_on_next_line = true
+ij_java_ternary_operation_signs_on_next_line = true
 ij_java_wrap_comments = false
+# Indentation wants a wrapped for-header or resource list at +8, not aligned under its first element
+ij_java_align_multiline_for = false
+ij_java_align_multiline_resources = false
+# Splitting annotations onto their own lines pushed a trailing "// reason" comment onto a line of its own at +8,
+# which CommentsIndentation rejects; existing line breaks between annotations are kept either way
+ij_java_method_annotation_wrap = off
+ij_java_field_annotation_wrap = off
+# TextBlockGoogleStyleFormatting wants the content and the closing quotes under the opening ones
+ij_java_align_multiline_text_blocks = true
 
 [{checkstyle*.xml,*.properties}]
 indent_style = space
